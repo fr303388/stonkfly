@@ -27,7 +27,7 @@ class Settings:
     products: tuple[str, ...] = ("BTC-USDC",)
     capital: str = "10000000"
     order_limit: str = "100000"
-    loss_stop: str = "200"
+    loss_stop: str = "500000"
     fee_reserve: str = "0.02"
     slippage: str = "0.005"
     spread_limit: str = "0.005"
