@@ -1496,6 +1496,7 @@ let tfRotateTimer = null;
 
 // Real-time Binance price (updates every 2s, independent of simulation steps)
 let liveBtcPrice = 0;
+let totalRealizedPnl = 0; // 已實現盈虧總和（由交易紀錄計算）
 let lastTradeCount = 0;
 let livePriceTimer = null;
 
@@ -1981,9 +1982,6 @@ function updatePnL(meta, simEquity, initial) {
   }
   // Use simulation equity as authoritative (marked at simulation prices)
   const equity = simEquity > 0 ? simEquity : cash;
-  // Total P&L based on simulation equity
-  const totalPnl = equity - initial;
-  const roi = initial > 0 ? (totalPnl / initial * 100) : 0;
   // Cost basis = initial - cash (approximate)
   const costBasis = initial - cash;
   // Avg entry price
@@ -1997,6 +1995,9 @@ function updatePnL(meta, simEquity, initial) {
   const posValue = btcAmount > 0 ? btcAmount * markPrice : 0;
   // Unrealized P&L based on real-time bid price (same as equity marking)
   const unrealized = btcAmount > 0 && avgPrice > 0 ? (markPrice - avgPrice) * btcAmount : 0;
+  // Total P&L = 已實現盈虧 + 未實現盈虧（兩者都用即時價格，確保同步）
+  const totalPnl = totalRealizedPnl + unrealized;
+  const roi = initial > 0 ? (totalPnl / initial * 100) : 0;
 
   // Position value
   const posValEl = document.getElementById('posValue');
@@ -2275,6 +2276,7 @@ function renderEvents(events) {
   const sorted = filled.slice().sort((a, b) => (a.wall_time || 0) - (b.wall_time || 0));
   let posQty = 0, posCost = 0; // avg cost basis
   const realizedMap = {};
+  totalRealizedPnl = 0; // reset and recalculate
   sorted.forEach(ev => {
     const ex = ev.execution || {};
     const base = parseFloat(ex.base) || 0;
@@ -2290,6 +2292,7 @@ function renderEvents(events) {
       const sellQty = Math.min(base, posQty);
       const realized = (price - posCost) * sellQty;
       realizedMap[ev.tick] = realized;
+      totalRealizedPnl += realized;
       posQty = Math.max(0, posQty - base);
       if (posQty === 0) posCost = 0;
     } else {
