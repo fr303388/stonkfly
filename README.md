@@ -124,7 +124,7 @@ stonkfly/
 
 ```bash
 # 1. 複製專案
-git clone https://github.com/nftechie/stonkfly.git
+git clone https://github.com/fr303388/stonkfly.git
 cd stonkfly
 
 # 2. 建立虛擬環境
