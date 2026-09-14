@@ -21,3 +21,28 @@ build/
 coinbase-key.json
 cdp_api_key.json
 *.partial
+
+# Temp & log files
+_screenshot.png
+_ss.png
+_ss2.png
+crash_log.txt
+run.log
+run_err.log
+*.log
+*.bak
+
+# Batch files (platform-specific)
+*.bat
+
+# Old monitor versions
+monitor.html
+monitor.py
+monitor_cyber.html
+monitor_cyber.py
+
+# Audio assets
+trade_sound.mp3
+
+# Backup brain
+runs/brain_backup/

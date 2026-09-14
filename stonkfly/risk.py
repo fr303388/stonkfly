@@ -14,6 +14,7 @@ class Guard:
         self.s = settings
         self.l = ledger
         self.stop_file = stop_file
+        self.strategy_budget = None  # set by strategy engine per tick
 
     def check(self, quotes, now):
         if self.stop_file.exists():
@@ -48,7 +49,11 @@ class Guard:
         reserve = D(self.s.fee_reserve)
         if side == "BUY":
             limit = up(q.ask * (1 + D(self.s.slippage)), q.price_increment)
-            budget = min(D(self.s.order_limit), self.l.cash) / (1 + reserve)
+            base_budget = min(D(self.s.order_limit), self.l.cash) / (1 + reserve)
+            if self.strategy_budget is not None:
+                budget = min(D(self.strategy_budget), self.l.cash) / (1 + reserve)
+            else:
+                budget = base_budget
             size = down(budget / limit, q.base_increment)
         else:
             limit = down(q.bid * (1 - D(self.s.slippage)), q.price_increment)

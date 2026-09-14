@@ -1,6 +1,9 @@
-"""Public Coinbase observations. Synthetic fixtures are explicit test inputs."""
+﻿"""Public Coinbase observations. Synthetic fixtures are explicit test inputs."""
 
+import json
 import math
+import urllib.parse
+import urllib.request
 import time
 from dataclasses import asdict, dataclass
 from datetime import datetime
@@ -144,7 +147,7 @@ class FixtureMarket:
         self.history = {p: [] for p in products}
 
     def snapshot(self):
-        base = {"BTC-USDC": 60000, "ETH-USDC": 2500, "SOL-USDC": 100}
+        base = {"BTC-USDC": 60000, "ETH-USDC": 2500, "SOL-USDC": 100, "PEPE-USDT": 0.000012, "BTC-USDT": 60000, "BNB-USDT": 580}
         quotes = {}
         for j, p in enumerate(self.products):
             price = D(base[p]) * D(1 + 0.025 * math.sin(self.tick * 0.6 + j))
@@ -168,3 +171,63 @@ class FixtureMarket:
         return quotes
 
     record = CoinbaseMarket.record
+
+
+
+class BinanceMarket:
+    """Binance public market data for live trading."""
+
+    def __init__(self, products, base_url="https://api.binance.com"):
+        self.base_url = base_url
+        self.products = products
+        self.meta = {}
+        self.history = {p: [] for p in products}
+        self._symbol_map = {
+            "BTC-USDT": "BTCUSDT", "BNB-USDT": "BNBUSDT",
+            "ETH-USDT": "ETHUSDT",
+            "SOL-USDT": "SOLUSDT",
+            "BTC-USDC": "BTCUSDC",
+        }
+
+    def _get(self, path, params=None):
+        url = f"{self.base_url}{path}"
+        if params:
+            url = f"{url}?{urllib.parse.urlencode(params)}"
+        req = urllib.request.Request(url, headers={"User-Agent": "stonkfly/1.0"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+
+    def snapshot(self):
+        result = {}
+        for product in self.products:
+            symbol = self._symbol_map.get(product, product.replace("-", ""))
+            if not self.history[product]:
+                klines = self._get("/api/v3/klines", {
+                    "symbol": symbol, "interval": "15m", "limit": 120
+                })
+                self.history[product] = [float(k[4]) for k in klines]
+            ticker = self._get("/api/v3/ticker/bookTicker", {"symbol": symbol})
+            exchange_info = self._get("/api/v3/exchangeInfo", {"symbol": symbol})
+            sym_info = exchange_info["symbols"][0]
+            filters = {f["filterType"]: f for f in sym_info["filters"]}
+            lot_size = filters.get("LOT_SIZE", {})
+            price_filter = filters.get("PRICE_FILTER", {})
+            min_notional = filters.get("MIN_NOTIONAL", filters.get("NOTIONAL", {}))
+            quote = Quote(
+                product,
+                D(ticker["bidPrice"]),
+                D(ticker["askPrice"]),
+                time.time(),
+                D(lot_size.get("stepSize", "0.00000001")),
+                D(price_filter.get("tickSize", "0.01")),
+                D(price_filter.get("tickSize", "0.01")),
+                D(min_notional.get("minNotional", "10")),
+                D(lot_size.get("minQty", "0.00000001")),
+            )
+            result[product] = quote
+        return result
+
+    def record(self, quotes):
+        for p, q in quotes.items():
+            self.history[p].append(float((q.bid + q.ask) / 2))
+            self.history[p] = self.history[p][-120:]

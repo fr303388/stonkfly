@@ -1,0 +1,2716 @@
+﻿<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>STONKFLY // 果蠅神經交易監控</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;700&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; }
+  :root {
+    --bg: #0b0e17;
+    --panel: #121622;
+    --panel2: #181d2e;
+    --border: #2a3045;
+    --cyan: #4dd0e1;
+    --green: #26de81;
+    --red: #fc5c65;
+    --yellow: #fed330;
+    --orange: #fd9644;
+    --purple: #a55eea;
+    --pink: #ff6b9d;
+    --text: #dfe6f0;
+    --dim: #6b7394;
+    --blue: #4b7bec;
+  }
+  body {
+    font-family: 'Noto Sans TC', 'JetBrains Mono', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  /* Header */
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    background: linear-gradient(180deg, #151a2a, var(--panel));
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .header .title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: 1px;
+  }
+  .header .title span { color: var(--cyan); }
+  .badge {
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    border: 1px solid;
+  }
+  .badge-paused { background: rgba(252,92,101,0.15); color: var(--red); border-color: var(--red); }
+  .badge-live { background: rgba(38,222,129,0.15); color: var(--green); border-color: var(--green); animation: pulse 2s infinite; }
+  .badge-ro { background: rgba(75,123,236,0.15); color: var(--blue); border-color: var(--blue); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+  .header-stat {
+    font-size: 13px;
+    color: var(--dim);
+  }
+  .header-stat b { color: var(--text); font-family: 'JetBrains Mono', monospace; }
+  .header .spacer { flex: 1; }
+  .product-toggle {
+    padding: 4px 12px;
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    color: var(--cyan);
+  }
+
+  /* Process flow */
+  .flow {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 8px;
+    padding: 10px 16px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+  }
+  .flow-card {
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    position: relative;
+  }
+  .flow-card .step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    background: var(--cyan);
+    color: #000;
+    font-size: 11px;
+    font-weight: 700;
+    margin-right: 6px;
+  }
+  .flow-card .step-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .flow-card .step-desc {
+    font-size: 11px;
+    color: var(--dim);
+    margin-top: 4px;
+    line-height: 1.4;
+  }
+  .flow-card { cursor: pointer; transition: all 0.2s; position: relative; overflow: visible; }
+  .flow-card:hover { border-color: var(--cyan); transform: translateY(-1px); }
+  .step-metric {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--cyan);
+    margin-top: 6px;
+    text-shadow: 0 0 8px rgba(77,208,225,0.4);
+  }
+  .flow-card.active { border-color: var(--cyan); box-shadow: 0 0 12px rgba(77,208,225,0.2); }
+  .flow-card.active .step-num { background: var(--green); }
+  .flow-card.walking { border-color: var(--yellow); box-shadow: 0 0 16px rgba(255,193,7,0.35); animation: walkPulse 0.6s ease-in-out infinite alternate; }
+  .flow-card.walking .step-num { background: var(--yellow); color: #000; }
+  @keyframes walkPulse { from { box-shadow: 0 0 8px rgba(255,193,7,0.2); } to { box-shadow: 0 0 20px rgba(255,193,7,0.5); } }
+  .fly-indicator { position: absolute; top: -14px; right: 8px; font-size: 18px; z-index: 10; animation: flyBob 0.5s ease-in-out infinite alternate; filter: drop-shadow(0 0 4px rgba(255,193,7,0.6)); }
+  @keyframes flyBob { from { transform: translateY(0) rotate(-5deg); } to { transform: translateY(-4px) rotate(5deg); } }
+
+
+  /* Depth Chart */
+  .depth-panel { font-family: 'JetBrains Mono', monospace; }
+  .depth-row { display:flex;justify-content:space-between;align-items:center;padding:2px 10px;font-size:12px;position:relative;height:22px; }
+  .depth-row .depth-bar { position:absolute;top:0;bottom:0;right:0;opacity:0.15;z-index:0; }
+  .depth-row .depth-price { position:relative;z-index:1;font-weight:600; }
+  .depth-row .depth-qty { position:relative;z-index:1;color:var(--dim);font-size:11px; }
+  .depth-ask .depth-price { color:#ff5c8a; }
+  .depth-ask .depth-bar { background:linear-gradient(to left,#ff5c8a,transparent); }
+  .depth-bid .depth-price { color:#00e5ff; }
+  .depth-bid .depth-bar { background:linear-gradient(to left,#00e5ff,transparent); }
+  .depth-spread { text-align:center;padding:8px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);margin:4px 0; }
+  .depth-spread .price-big { font-size:28px;font-weight:800;color:#fff;letter-spacing:1px;text-shadow:0 0 12px rgba(254,211,48,0.5); }
+  .depth-spread .spread-info { font-size:10px;color:var(--dim);margin-top:2px; }
+  .depth-ratio { display:flex;align-items:center;gap:8px;padding:6px 10px;font-size:11px; }
+  .depth-ratio-bar { flex:1;height:6px;background:rgba(255,255,255,0.05);border-radius:3px;overflow:hidden;display:flex; }
+  .depth-ratio-bid { background:linear-gradient(90deg,#00e5ff,#00b8d4);height:100%;transition:width 0.5s; }
+  .depth-ratio-ask { background:linear-gradient(90deg,#ff5c8a,#ff2d6b);height:100%;transition:width 0.5s; }
+  .depth-flash { animation: depthFlash 0.5s ease-out; }
+  @keyframes depthFlash { 0% { background:rgba(254,211,48,0.3); } 100% { background:transparent; } }
+
+  /* Main grid */
+  .main {
+    display: grid;
+    grid-template-columns: 1.7fr 1fr;
+    gap: 10px;
+    padding: 10px 16px;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: var(--panel2);
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .panel-header .icon { margin-right: 6px; }
+  .panel-body { padding: 10px 12px; }
+
+  /* 3D Brain */
+  #brain3d {
+    width: 100%;
+    height: 480px;
+    display: block;
+    background: radial-gradient(ellipse at center, #0f1424 0%, #070912 100%);
+  }
+  .brain-controls {
+    display: flex;
+    gap: 6px;
+    padding: 8px 12px;
+    background: var(--panel2);
+    border-top: 1px solid var(--border);
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .ctrl-btn {
+    padding: 4px 10px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 11px;
+    color: var(--text);
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.2s;
+  }
+  .ctrl-btn:hover { border-color: var(--cyan); color: var(--cyan); }
+  .ctrl-btn.active { background: var(--cyan); color: #000; border-color: var(--cyan); }
+  .ctrl-label { font-size: 11px; color: var(--dim); margin-right: 4px; }
+
+  /* Right column */
+  .right-col { display: flex; flex-direction: column; gap: 10px; }
+
+  /* Eye chart */
+  #eyeChart { width: 100%; flex: 1; min-height: 200px; display: block; background: #0a0d18; }
+  .eye-info {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 12px;
+    font-size: 11px;
+    color: var(--dim);
+    background: var(--panel2);
+  }
+
+  /* Decision */
+  .decision-big {
+    font-size: 21px;
+    font-weight: 900;
+    text-align: center;
+    padding: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 4px;
+  }
+  .decision-BUY { color: var(--green); text-shadow: 0 0 20px rgba(38,222,129,0.5); }
+  .decision-SELL { color: var(--red); text-shadow: 0 0 20px rgba(252,92,101,0.5); }
+  .decision-HOLD { color: var(--yellow); text-shadow: 0 0 20px rgba(254,211,48,0.5); }
+  .exec-status {
+    text-align: center;
+    font-size: 13px;
+    color: var(--dim);
+    margin-bottom: 10px;
+  }
+  .exec-status b { color: var(--orange); }
+  .hz-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 6px 0;
+    font-size: 12px;
+  }
+  .hz-label { width: 80px; color: var(--dim); }
+  .hz-bar-bg {
+    flex: 1;
+    height: 16px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .hz-bar { height: 100%; border-radius: 3px; transition: width 0.5s; }
+  .hz-val { width: 60px; text-align: right; font-family: 'JetBrains Mono', monospace; font-weight: 700; }
+  .rule-box {
+    margin-top: 10px;
+    padding: 8px 10px;
+    background: rgba(77,208,225,0.05);
+    border-left: 3px solid var(--cyan);
+    border-radius: 0 4px 4px 0;
+    font-size: 11px;
+    color: var(--dim);
+    line-height: 1.6;
+  }
+  .rule-box b { color: var(--cyan); }
+
+  /* Feedback */
+  .feedback-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+    font-size: 12px;
+  }
+  .feedback-icon { font-size: 16px; }
+  .feedback-reward { color: var(--green); }
+  .feedback-aversive { color: var(--red); }
+  .feedback-none { color: var(--dim); }
+
+  /* Account summary in header */
+  .account-row {
+    display: flex;
+    gap: 20px;
+    padding: 12px 16px;
+    background: var(--panel2);
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .account-item { color: var(--dim); }
+  .account-item b { color: var(--text); font-family: 'JetBrains Mono', monospace; margin-left: 4px; font-size: 24px; }
+  .pnl-highlight {
+    padding: 6px 14px;
+    border-radius: 6px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+  }
+  .pnl-highlight b { font-size: 30px; }
+  .pnl-profit { color: var(--green) !important; border-color: rgba(38,222,129,0.4); background: rgba(38,222,129,0.08); }
+  .pnl-profit b { color: var(--green) !important; text-shadow: 0 0 10px rgba(38,222,129,0.4); }
+  .pnl-loss { color: var(--red) !important; border-color: rgba(252,92,101,0.4); background: rgba(252,92,101,0.08); }
+  .pnl-loss b { color: var(--red) !important; text-shadow: 0 0 10px rgba(252,92,101,0.4); }
+  .tp-indicator { min-width: 140px; }
+  .tp-bar-bg { width: 130px; height: 8px; background: rgba(255,255,255,0.08); border-radius: 4px; margin-top: 4px; overflow: hidden; }
+  .tp-bar { height: 100%; background: linear-gradient(90deg, var(--cyan), var(--green)); border-radius: 4px; transition: width 0.5s; width: 0%; }
+  .tp-triggered { animation: tpFlash 1s infinite; }
+  @keyframes tpFlash { 0%,100%{box-shadow:0 0 5px var(--green)} 50%{box-shadow:0 0 20px var(--green)} }
+  .pnl-row {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 16px 20px;
+    background: linear-gradient(180deg, var(--panel2), var(--panel));
+    border-bottom: 1px solid var(--border);
+  }
+  .pnl-row-label {
+    font-size: 18px;
+    color: var(--dim);
+    font-weight: 700;
+    letter-spacing: 2px;
+  }
+  .pnl-big { padding: 8px 24px; }
+  .pnl-big b { font-size: 36px !important; line-height: 1; }
+  .pnl-pct { font-size: 14px !important; margin-left: 12px; font-family: 'JetBrains Mono', monospace; font-weight: 700; }
+  .pnl-row-sub { font-size: 14px; color: var(--dim); font-family: 'JetBrains Mono', monospace; }
+  .tf-btn {
+    padding: 2px 10px;
+    margin-left: 6px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    font-size: 11px;
+    color: var(--dim);
+    cursor: pointer;
+    font-family: inherit;
+    vertical-align: middle;
+  }
+  .tf-btn.active { background: var(--cyan); color: #000; border-color: var(--cyan); font-weight: 700; }
+
+  /* Loading overlay */
+  .loading {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    color: var(--cyan);
+    font-size: 14px;
+    z-index: 10;
+  }
+  .brain-wrap { position: relative; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div class="title">STONKFLY <span>BTC 果蠅</span></div>
+  <span class="badge badge-ro" id="modeBadge">模擬</span>
+  <span class="badge badge-paused" id="statusBadge">等待中</span>
+  <div class="header-stat">步驟 <b id="stepNum">--</b></div>
+  <div class="header-stat">模擬 <b id="simTimer">00:00:00</b></div>
+  <div class="header-stat" title="看門狗自動重啟次數">看門狗 <b id="watchdogCount" style="color:var(--yellow);">0</b> 次</div>
+  <div class="header-stat">淨值 <b id="netValue">$--</b></div>
+  <div class="header-stat" id="computeStatus">等待模擬</div>
+  <div class="spacer"></div>
+  <div class="header-stat" style="font-family:'JetBrains Mono',monospace;font-size:15px;color:var(--cyan)" id="clock">--:--:--</div>
+  <div class="product-toggle">BTC 果蠅</div>
+</div>
+
+<!-- Account row 1: data metrics -->
+<div class="account-row">
+  <div class="account-item">現金 <b id="cash">--</b></div>
+  <div class="account-item">初始資金 <b id="initialCash">$100</b></div>
+  <div class="account-item">持倉市值 <b id="posValue">--</b></div>
+  <div class="account-item">未實現 <b id="unrealizedPnl">--</b></div>
+  <div class="account-item">總放電 <b id="totalSpikes">--</b></div>
+  <div class="account-item">腦模擬時間 <b id="brainMs">--</b></div>
+</div>
+
+<!-- Account row 2: prominent P&L -->
+<div class="pnl-row">
+  <div class="pnl-row-label">總盈虧（已實現+未實現）</div>
+  <div class="pnl-highlight pnl-big" id="pnlBox">
+    <b id="pnlLive">--</b>
+    <span id="pnlPct" class="pnl-pct">--</span>
+  </div>
+  <div class="pnl-row-sub" id="pnlSub">--</div>
+</div>
+
+<!-- Process flow -->
+<div class="flow" id="flow">
+  <div class="flow-card" data-step="1" onclick="focusPanel('klineChart')">
+    <div><span class="step-num">1</span><span class="step-title">市場數據(15分) + RSI + 纏論</span></div>
+    <div class="step-metric" id="m1">-- 根 K 線</div>
+    <div class="step-desc" id="rsiInfo">RSI: -- | 80賣/20買</div>
+    <div class="step-desc" id="czscInfo" style="margin-top:4px;color:var(--yellow);">纏論: 分析中…</div>
+  </div>
+  <div class="flow-card" data-step="2" onclick="focusPanel('eyeChart')">
+    <div><span class="step-num">2</span><span class="step-title">視網膜編碼</span></div>
+    <div class="step-metric" id="m2">-- 感光細胞</div>
+    <div class="step-desc">3,335 視網膜輸入神經元，R1-R6 感光細胞層 · 輸入 120 根 15分K線，編碼為 320×180 感光影像</div>
+  </div>
+  <div class="flow-card" data-step="3" onclick="focusPanel('brain3d'); if(!heatmapOn) toggleHeatmap();">
+    <div><span class="step-num">3</span><span class="step-title">神經模擬 + 纏論</span></div>
+    <div class="step-metric" id="m3">-- spikes</div>
+    <div class="step-desc">16.6 萬神經元聯結，2,560 萬突觸，每步 0.1ms 模擬</div>
+  </div>
+  <div class="flow-card" data-step="4" onclick="focusPanel('decision')">
+    <div><span class="step-num">4</span><span class="step-title">神經解碼決策</span></div>
+    <div class="step-metric" id="m4">--</div>
+    <div class="step-desc" id="m4desc">感光細胞輸入價格走勢，DNp20 左右解碼，DNpe017 閘門控制</div>
+  </div>
+  <div class="flow-card" data-step="5" onclick="focusPanel('execStatus')">
+    <div><span class="step-num">5</span><span class="step-title">風控與執行</span></div>
+    <div class="step-metric" id="m5">--</div>
+    <div class="step-desc">買賣訊號經風控檢查，通過後執行訂單</div>
+  </div>
+  <div class="flow-card" data-step="6" onclick="focusPanel('decision')">
+    <div><span class="step-num">6</span><span class="step-title">強化學習</span></div>
+    <div class="step-metric" id="m6">--</div>
+    <div class="step-desc" id="m6desc">盈利刺激 PAM11 獎勵多巴胺，虧損刺激 PPL101 厭惡，調整 KC→MBON 突觸</div>
+  </div>
+</div>
+
+<!-- Main full-width layout -->
+<div style="display:flex;flex-direction:column;gap:12px;padding:12px;">
+<!-- Row 1: Brain + Eye + Neural monitoring -->
+<div style="display:flex;gap:12px;align-items:stretch;">
+  <!-- 3D Brain (flex:3) -->
+  <div class="panel brain-panel" id="brainPanel" style="flex:2;min-width:0;margin:0;display:flex;flex-direction:column;">
+    <div class="panel-header">
+      <span class="brain-toggle" onclick="toggleBrain()"><span class="icon">🧠</span>三維神經元 + 熱力圖 <span id="brainArrow">▼</span></span>
+    <span style="font-size:11px;color:var(--dim)" id="brainInfo">載入中…</span>
+    </div>
+    <div class="brain-wrap" style="position:relative;width:100%;flex:1;min-height:200px;overflow:hidden;">
+      <canvas id="brain3d" style="width:100%;height:100%;"></canvas>
+      <canvas id="heatmap" style="position:absolute;top:0;left:0;width:100%;height:100%;display:none;pointer-events:none;"></canvas>
+      <div class="loading" id="brainLoading">載入中 166,700 神經元…</div>
+    </div>
+    <div class="brain-controls">
+    <span class="ctrl-label">着色:</span>
+      <button class="ctrl-btn active" onclick="setView('auto')">自動旋轉</button>
+      <button class="ctrl-btn" onclick="setView('front')">正面</button>
+    <button class="ctrl-btn" onclick="setView('side')">側面</button>
+    <button class="ctrl-btn" onclick="setView('top')">俯視</button>
+      <button class="ctrl-btn" onclick="toggleHeatmap()" id="heatmapBtn">熱力圖</button>
+    <span class="ctrl-label" style="margin-left:12px">標籤:</span>
+      <button class="ctrl-btn active" onclick="setColorMode('region')">腦區着色</button>
+    <button class="ctrl-btn" onclick="setColorMode('spike')">放電着色</button>
+    <span class="ctrl-label" style="margin-left:12px">標籤:</span>
+    <button class="ctrl-btn active" onclick="toggleLabel('kc')">肯楊細胞 KC</button>
+      <button class="ctrl-btn" onclick="toggleLabel('retina')">感光細胞</button>
+    <span class="ctrl-label" style="margin-left:12px">數據點:</span>
+    <button class="ctrl-btn active" onclick="setSlowmo(8)">慢動作 8x</button>
+    <button class="ctrl-btn" onclick="setSlowmo(1)">正常</button>
+    </div>
+  </div>
+
+  <!-- Eye chart (flex:2) -->
+  <div class="panel" style="flex:2;min-width:0;margin:0;display:flex;flex-direction:column;">
+    <div class="panel-header">
+      <span><span class="icon">👁</span>感光細胞輸入</span>
+      <span style="font-size:11px;color:var(--dim)">3,335 個 R1-R6 感光細胞</span>
+    </div>
+    <canvas id="eyeChart"></canvas>
+    <div class="eye-info">
+      <span>價格走勢編碼為視覺輸入，投射至果蠅視網膜神經元</span>
+      <span id="eyePrice">--</span>
+    </div>
+  </div>
+
+  <!-- Neural monitoring (flex:2) -->
+  <div class="panel" style="flex:2;min-width:0;margin:0;display:flex;flex-direction:column;">
+    <div class="panel-header">
+      <span><span class="icon">⚡</span>神經活動監測</span>
+    </div>
+    <div class="panel-body" style="flex:1;display:flex;flex-direction:column;">
+      <div style="display:flex;gap:12px;align-items:center;margin-bottom:4px;">
+        <div class="decision-big" id="decision" style="flex:1;text-align:center;">HOLD</div>
+        <div id="positionDir" style="flex:1;text-align:center;font-size:14px;font-weight:900;font-family:'JetBrains Mono',monospace;color:var(--dim);letter-spacing:2px;"></div>
+      </div>
+      <div class="exec-status" id="execStatus">執行: --</div>
+      <div class="hz-row">
+        <span class="hz-label">DNp20 放電</span>
+        <div class="hz-bar-bg"><div class="hz-bar" id="leftBar" style="background:var(--red);width:0%"></div></div>
+        <span class="hz-val" id="leftHz" style="color:var(--red)">-- Hz</span>
+      </div>
+      <div class="hz-row">
+        <span class="hz-label">DNp20 放電</span>
+        <div class="hz-bar-bg"><div class="hz-bar" id="rightBar" style="background:var(--green);width:0%"></div></div>
+        <span class="hz-val" id="rightHz" style="color:var(--green)">-- Hz</span>
+      </div>
+      <div class="hz-row">
+        <span class="hz-label">閘門放電</span>
+        <div class="hz-bar-bg"><div class="hz-bar" id="diffBar" style="background:var(--cyan);width:0%"></div></div>
+        <span class="hz-val" id="diffHz" style="color:var(--cyan)">-- Hz</span>
+      </div>
+      <div class="hz-row">
+        <span class="hz-label">KC 放電</span>
+        <div class="hz-bar-bg"><div class="hz-bar" id="kcBar" style="background:linear-gradient(90deg,var(--cyan),var(--green));width:0%"></div></div>
+        <span class="hz-val" id="kcSpikes" style="color:var(--cyan)">--</span>
+      </div>
+      <div class="hz-row">
+        <span class="hz-label">432Hz</span>
+        <div class="hz-bar-bg"><div class="hz-bar" id="hz432Bar" style="background:linear-gradient(90deg,#4dd0e1,#a55eea);width:0%"></div></div>
+        <span class="hz-val" id="hz432Status" style="color:var(--dim)">OFF</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:6px 0;">
+        <div style="background:rgba(77,208,225,0.08);border-radius:4px;padding:5px;text-align:center;">
+          <div style="font-size:9px;color:var(--dim);">獎勵</div>
+          <div style="font-size:14px;font-weight:700;color:var(--green);font-family:'JetBrains Mono',monospace;" id="pam11Spikes">--</div>
+        </div>
+        <div style="background:rgba(255,107,107,0.08);border-radius:4px;padding:5px;text-align:center;">
+          <div style="font-size:9px;color:var(--dim);">厭惡</div>
+          <div style="font-size:14px;font-weight:700;color:var(--red);font-family:'JetBrains Mono',monospace;" id="ppl101Spikes">--</div>
+        </div>
+      </div>
+      <!-- Flex spacer to fill empty space -->
+      <div style="flex:1;"></div>
+      <!-- 纏論學習數據 -->
+      <div style="background:rgba(168,85,247,0.06);border:1px solid rgba(168,85,247,0.2);border-radius:4px;padding:6px 8px;margin:4px 0;width:100%;box-sizing:border-box;">
+        <div style="font-size:10px;color:var(--dim);margin-bottom:3px;">📚 纏論學習</div>
+        <div style="font-size:10px;line-height:1.7;">
+          <span style="color:var(--dim);">時間</span> <b id="chanStudyTime" style="color:var(--text);">--</b>
+          <span style="color:var(--dim);margin-left:10px;">理論</span> <b id="chanAvgLevel" style="color:var(--cyan);">--%</b>
+          <span style="color:var(--dim);margin-left:10px;">實戰</span> <b id="practicalAvg" style="color:var(--yellow);">--%</b>
+          <span style="color:var(--dim);margin-left:10px;">勝率</span> <b id="tradeWinRate" style="color:var(--green);">--%</b>
+          <span style="color:var(--dim);margin-left:10px;">買點</span> <b id="buyConf" style="color:var(--green);">--%</b>
+          <span style="color:var(--dim);margin-left:10px;">賣點</span> <b id="sellConf" style="color:var(--red);">--%</b>
+        </div>
+      </div>
+      <!-- Advanced Learning -->
+      <div style="background:rgba(0,210,211,0.06);border:1px solid rgba(0,210,211,0.2);border-radius:6px;padding:8px 10px;margin-top:6px;">
+        <div style="font-size:10px;color:#00d2d3;font-weight:700;margin-bottom:4px;letter-spacing:1px;">🧠 進階學習</div>
+        <div id="advKnowledge" style="font-size:10px;color:var(--text);font-family:'JetBrains Mono',monospace;line-height:1.6;">載入中…</div>
+        <div id="advReviews" style="font-size:10px;color:var(--dim);font-family:'JetBrains Mono',monospace;margin-top:4px;"></div>
+        <div id="advLessons" style="font-size:10px;color:#ffa502;font-family:'JetBrains Mono',monospace;margin-top:4px;"></div>
+      </div>
+      <div id="stimStatus" style="font-size:10px;color:var(--dim);text-align:center;">無刺激</div>
+    </div>
+  </div>
+</div><!-- /row1 -->
+
+<!-- Row 2: K-line + Depth (full width) -->
+<div style="display:flex;gap:12px;align-items:stretch;width:100%;">
+  <!-- Binance K-line Candlestick Chart -->
+<div class="panel kline-panel" style="margin:0;flex:1;min-width:0;">
+  <div class="panel-header">
+    <span><span class="icon">📈</span>Binance BTC/USDT K 線
+      <button class="tf-btn active" onclick="setTimeframe('1m')" id="tf1m">1分</button>
+      <button class="tf-btn" onclick="setTimeframe('5m')" id="tf5m">5分</button>
+      <button class="tf-btn" onclick="setTimeframe('15m')" id="tf15m">15分</button>
+      <button class="tf-btn" onclick="setTimeframe('30m')" id="tf30m">30分</button>
+      <button class="tf-btn" onclick="setTimeframe('1h')" id="tf1h">1時</button>
+      <button class="tf-btn" onclick="setTimeframe('4h')" id="tf4h">4時</button>
+      <button class="tf-btn" onclick="setTimeframe('8h')" id="tf8h">8時</button>
+      <button class="tf-btn" onclick="setTimeframe('1d')" id="tf1d">1日</button>
+      <button class="tf-btn" onclick="toggleAutoRotate()" id="autoRotateBtn" style="background:rgba(0,210,211,0.2);border-color:#00d2d3;color:#00d2d3;">↻ 自動15s</button>
+    </span>
+    </span>
+    <span style="font-size:11px;color:var(--dim)" id="tokenInfo">--</span>
+    <span style="font-size:11px;color:var(--dim)" id="klineInfo">--</span>
+  </div>
+  <div style="position:relative;">
+    <div id="czscSignal" style="position:absolute;top:8px;left:12px;z-index:10;font-size:11px;color:#a855f7;font-weight:700;font-family:'JetBrains Mono',monospace;text-shadow:0 0 8px rgba(168,85,247,0.5);pointer-events:none;">--</div>
+    <div id="tvChartContainer" style="width:100%;height:480px;background:#0a0d18;"></div>
+    <canvas id="pivotOverlay" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:5;"></canvas>
+  </div>
+  <!-- Professional Chan Theory Info Bar -->
+  <div id="chanInfoBar" style="display:flex;gap:16px;padding:8px 12px;background:linear-gradient(90deg,rgba(168,85,247,0.08),rgba(10,13,24,0.9));border-top:1px solid rgba(168,85,247,0.3);flex-wrap:wrap;font-size:11px;font-family:'JetBrains Mono',monospace;align-items:center;">
+    <span style="color:var(--dim);">禪論：</span>
+    <span id="chanTrend" style="font-weight:700;">--</span>
+    <span style="color:var(--border);">|</span>
+    <span id="chanStroke" style="color:var(--text);">筆: --</span>
+    <span style="color:var(--border);">|</span>
+    <span id="chanPivot" style="color:var(--text);">中樞: --</span>
+    <span style="color:var(--border);">|</span>
+    <span id="chanDiv" style="color:var(--dim);">背馳: --</span>
+    <span style="color:var(--border);">|</span>
+    <span id="chanSig" style="color:var(--dim);">訊號: --</span>
+    <span style="margin-left:auto;font-weight:700;font-size:13px;" id="chanSuggestion">--</span>
+  </div>
+  <div id="tradeMarkersBar" style="display:flex;gap:8px;padding:6px 10px;background:rgba(10,13,24,0.8);border-top:1px solid var(--border);flex-wrap:wrap;font-size:10px;">
+    <span style="color:var(--dim);">買賣點位：</span>
+    <span id="tradeMarkersList" style="color:var(--text);">載入中…</span>
+  </div>
+</div>
+
+  <!-- Depth Chart -->
+  <div class="panel depth-panel" style="margin:0;width:340px;flex-shrink:0;margin-left:auto;">
+    <div class="panel-header">
+      <span><span class="icon">📊</span>訂單簿深度 · BTC/USDT</span>
+      <span style="font-size:10px;color:var(--dim)" id="depthStatus">連接中…</span>
+    </div>
+    <div id="depthAsks" style="min-height:190px;"></div>
+    <div class="depth-spread">
+      <div class="price-big" id="depthPrice">--</div>
+      <div class="spread-info" id="depthSpread">--</div>
+    </div>
+    <div id="depthBids" style="min-height:190px;"></div>
+    <div class="depth-ratio">
+      <span style="color:#00e5ff;font-weight:700;" id="depthBidPct">B 50%</span>
+      <div class="depth-ratio-bar">
+        <div class="depth-ratio-bid" id="depthRatioBid" style="width:50%;"></div>
+        <div class="depth-ratio-ask" id="depthRatioAsk" style="width:50%;"></div>
+      </div>
+      <span style="color:#ff5c8a;font-weight:700;" id="depthAskPct">S 50%</span>
+    </div>
+  </div>
+</div><!-- /row2 -->
+
+<!-- Row 3: Trading history (full width) -->
+<div class="panel" style="margin:0;">
+  <div class="panel-header">
+    <span><span class="icon">📋</span>交易紀錄</span>
+    <span style="font-size:11px;color:var(--dim)" id="eventCount">0 事件</span>
+  </div>
+  <div id="eventLog" style="max-height:400px;overflow-y:auto;width:100%;font-family:'JetBrains Mono',monospace;font-size:11px;">
+    <div style="padding:20px;text-align:center;color:var(--dim)">載入中…</div>
+  </div>
+</div>
+
+</div><!-- /main full-width -->
+
+<!-- Lightweight Charts -->
+<script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+<!-- Three.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+<script>
+// ============ STATE ============
+let brain3dData = null;
+let state = null;
+let klines = [];
+let czscStructures = null;
+let events = [];
+let scene, camera, renderer, controls, points, labels = [];
+let autoRotate = true;
+let colorMode = 'region';
+let showKC = true;
+let showRetina = true;
+let slowmo = 8;
+let animTime = 0;
+
+// ============ 3D BRAIN ============
+function initBrain() {
+  const canvas = document.getElementById('brain3d');
+  const wrap = canvas.parentElement; const w = canvas.clientWidth || wrap.clientWidth || 400; const h = wrap.clientHeight || 200;
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(60, w / h, 0.01, 100);
+  camera.position.set(0, 0, 2.5);
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setSize(w, h, false);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  controls = new THREE.OrbitControls(camera, canvas);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.05;
+  controls.autoRotate = true;
+  controls.autoRotateSpeed = 0.8;
+
+  // Ambient light
+  scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+
+  window.addEventListener('resize', () => {
+    const w2 = canvas.clientWidth;
+    camera.aspect = w2 / (canvas.parentElement.clientHeight || 200);
+    camera.updateProjectionMatrix();
+    renderer.setSize(w2, h);
+  });
+}
+
+function loadBrainPoints() {
+  if (!brain3dData || !brain3dData.positions) return;
+  // Remove old
+  if (points) { scene.remove(points); points.geometry.dispose(); points.material.dispose(); }
+  labels.forEach(l => scene.remove(l));
+  labels = [];
+
+  const pos = new Float32Array(brain3dData.positions);
+  const colors = new Float32Array(brain3dData.colors);
+  const spikes = brain3dData.spikes;
+  const n = pos.length / 3;
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+  // Custom shader for blinking
+  const material = new THREE.PointsMaterial({
+    size: 0.008,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.85,
+    sizeAttenuation: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  points = new THREE.Points(geometry, material);
+  scene.add(points);
+
+  // Key cell labels
+  const keyCells = brain3dData.key_cells || {};
+  Object.entries(keyCells).forEach(([name, info]) => {
+    if (!info.position) return;
+    const sprite = makeLabel(name, info.color, info.spikes);
+    sprite.position.set(info.position[0], info.position[1], info.position[2]);
+    scene.add(sprite);
+    labels.push(sprite);
+  });
+
+  document.getElementById('brainLoading').style.display = 'none';
+  document.getElementById('brainInfo').textContent =
+      `${n.toLocaleString()} 神經元 · ${(brain3dData.total_spikes||0).toLocaleString()} spikes · ${(brain3dData.active_neurons||0).toLocaleString()} 活躍`;
+
+  try { buildSynapses(); } catch(e) { console.warn("buildSynapses error", e); }
+}
+
+function buildSynapses() {
+  if (!brain3dData || !brain3dData.positions) return;
+  // Remove old
+  if (synapseLines) { scene.remove(synapseLines); synapseLines.geometry.dispose(); synapseLines.material.dispose(); }
+  if (impulseParticles) { scene.remove(impulseParticles); impulseParticles.geometry.dispose(); impulseParticles.material.dispose(); }
+
+  const pos = new Float32Array(brain3dData.positions);
+  const spikes = brain3dData.spikes;
+  const n = pos.length / 3;
+
+  // Find top active neurons
+  const indexed = [];
+  for (let i = 0; i < n; i++) indexed.push({i, s: spikes[i] || 0});
+  indexed.sort((a, b) => b.s - a.s);
+  const active = indexed.slice(0, MAX_CONNECTED_NEURONS);
+
+  // Build connections: each active neuron connects to 3 nearest active neighbors
+  const linePositions = [];
+  const lineColors = [];
+  const connections = []; // store for impulse animation
+
+  for (let a = 0; a < active.length; a++) {
+    const ia = active[a].i;
+    const xa = pos[ia*3], ya = pos[ia*3+1], za = pos[ia*3+2];
+    // Find 3 nearest
+    const dists = [];
+    for (let b = 0; b < active.length; b++) {
+      if (a === b) continue;
+      const ib = active[b].i;
+      const dx = pos[ib*3] - xa, dy = pos[ib*3+1] - ya, dz = pos[ib*3+2] - za;
+      dists.push({b, d: dx*dx + dy*dy + dz*dz});
+    }
+    dists.sort((p, q) => p.d - q.d);
+    for (let k = 0; k < Math.min(3, dists.length); k++) {
+      const ib = active[dists[k].b].i;
+      linePositions.push(xa, ya, za, pos[ib*3], pos[ib*3+1], pos[ib*3+2]);
+      // Cyan glow color, opacity based on spike intensity
+      const intensity = Math.min(1, (active[a].s + active[dists[k].b].s) / 20);
+      lineColors.push(0, intensity * 0.8, intensity, 0, intensity * 0.8, intensity);
+      connections.push({from: ia, to: ib});
+    }
+  }
+
+  if (linePositions.length > 0) {
+    const lineGeo = new THREE.BufferGeometry();
+    lineGeo.setAttribute('position', new THREE.Float32BufferAttribute(linePositions, 3));
+    lineGeo.setAttribute('color', new THREE.Float32BufferAttribute(lineColors, 3));
+    const lineMat = new THREE.LineBasicMaterial({
+      vertexColors: true, transparent: true, opacity: 0.35,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    synapseLines = new THREE.LineSegments(lineGeo, lineMat);
+    scene.add(synapseLines);
+  }
+
+  // Impulse particles (electrical signals traveling along connections)
+  impulseData = [];
+  const impulsePos = new Float32Array(MAX_IMPULSES * 3);
+  const impulseCols = new Float32Array(MAX_IMPULSES * 3);
+  if (connections.length > 0) {
+    for (let i = 0; i < MAX_IMPULSES; i++) {
+      const conn = connections[Math.floor(Math.random() * connections.length)];
+      if (conn) {
+        impulseData.push({
+          from: conn.from, to: conn.to,
+          progress: Math.random(),
+          speed: 0.008 + Math.random() * 0.015,
+        });
+      }
+      impulseCols[i*3] = 1; impulseCols[i*3+1] = 1; impulseCols[i*3+2] = 0.5;
+    }
+  }
+  const impGeo = new THREE.BufferGeometry();
+  impGeo.setAttribute('position', new THREE.BufferAttribute(impulsePos, 3));
+  impGeo.setAttribute('color', new THREE.BufferAttribute(impulseCols, 3));
+  const impMat = new THREE.PointsMaterial({
+    size: 0.025, vertexColors: true, transparent: true, opacity: 0.9,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  });
+  impulseParticles = new THREE.Points(impGeo, impMat);
+  scene.add(impulseParticles);
+}
+
+function makeLabel(text, color, spikes) {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.clientWidth * dpr; canvas.height = canvas.clientHeight * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = 'rgba(10,14,23,0.85)';
+  ctx.roundRect ? ctx.roundRect(0, 0, 256, 64, 8) : ctx.rect(0, 0, 256, 64);
+  ctx.fill();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.fillStyle = color;
+  ctx.font = 'bold 20px "Noto Sans TC", sans-serif';
+  ctx.fillText(text, 12, 28);
+  ctx.fillStyle = '#dfe6f0';
+  ctx.font = '14px "JetBrains Mono", monospace';
+  ctx.fillText(spikes + ' spikes', 12, 50);
+  const tex = new THREE.CanvasTexture(canvas);
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(0.25, 0.0625, 1);
+  return sprite;
+}
+
+function animateBrain() {
+  requestAnimationFrame(animateBrain);
+  animTime += 0.016 * (1 / slowmo);
+  heatmapTime += 0.016 * (1 / slowmo);
+  drawHeatmap();
+  if (points && colorMode === 'spike' && brain3dData) {
+    // Pulse brightness based on spikes
+    const colors = points.geometry.attributes.color.array;
+    const spikes = brain3dData.spikes;
+    const maxS = Math.max(1, ...spikes);
+    for (let i = 0; i < spikes.length; i++) {
+      const intensity = spikes[i] / maxS;
+      const blink = 0.5 + 0.5 * Math.sin(animTime * 3 + i * 0.1);
+      const b = intensity * (0.4 + 0.6 * blink);
+      colors[i*3] = b;
+      colors[i*3+1] = b * 0.9;
+      colors[i*3+2] = b * 1.2;
+    }
+    points.geometry.attributes.color.needsUpdate = true;
+  }
+  if (points) {
+    // Subtle pulsing of point size based on global activity
+    const pulse = 1 + 0.15 * Math.sin(animTime * 2);
+    points.material.size = 0.008 * pulse;
+  }
+
+  // Animate neural impulses traveling along synapses
+  try {
+    if (impulseParticles && brain3dData && impulseData.length > 0) {
+      const pos = new Float32Array(brain3dData.positions);
+      const impPos = impulseParticles.geometry.attributes.position.array;
+      const impCols = impulseParticles.geometry.attributes.color.array;
+      for (let i = 0; i < impulseData.length; i++) {
+        const imp = impulseData[i];
+        imp.progress += imp.speed;
+        if (imp.progress >= 1) {
+          const activeCount = Math.min(MAX_CONNECTED_NEURONS, pos.length / 3);
+          imp.from = Math.floor(Math.random() * activeCount);
+          imp.to = Math.floor(Math.random() * activeCount);
+          imp.progress = 0;
+          imp.speed = 0.008 + Math.random() * 0.015;
+        }
+        const t = imp.progress;
+        const fromIdx = imp.from, toIdx = imp.to;
+        if (fromIdx < pos.length/3 && toIdx < pos.length/3) {
+          const x = pos[fromIdx*3] + (pos[toIdx*3] - pos[fromIdx*3]) * t;
+          const y = pos[fromIdx*3+1] + (pos[toIdx*3+1] - pos[fromIdx*3+1]) * t + Math.sin(t * Math.PI) * 0.02;
+          const z = pos[fromIdx*3+2] + (pos[toIdx*3+2] - pos[fromIdx*3+2]) * t;
+          impPos[i*3] = x; impPos[i*3+1] = y; impPos[i*3+2] = z;
+          const brightness = Math.sin(t * Math.PI);
+          impCols[i*3] = 1.0; impCols[i*3+1] = 0.9 + 0.1 * brightness; impCols[i*3+2] = 0.4 + 0.6 * brightness;
+        }
+      }
+      impulseParticles.geometry.attributes.position.needsUpdate = true;
+      impulseParticles.geometry.attributes.color.needsUpdate = true;
+    }
+    if (synapseLines && brain3dData) {
+      const activity = (brain3dData.active_neurons || 0) / (brain3dData.n_neurons || 166700);
+      synapseLines.material.opacity = 0.2 + 0.3 * activity + 0.1 * Math.sin(animTime * 3);
+    }
+  } catch(e) { /* silent fail for animation */ }
+
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+function setView(mode) {
+  autoRotate = (mode === 'auto');
+  controls.autoRotate = autoRotate;
+  document.querySelectorAll('.ctrl-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  if (mode === 'front') { camera.position.set(0, 0, 2.5); controls.target.set(0,0,0); }
+  if (mode === 'side') { camera.position.set(2.5, 0, 0); controls.target.set(0,0,0); }
+  if (mode === 'top') { camera.position.set(0, 2.5, 0); controls.target.set(0,0,0); }
+}
+
+function setColorMode(mode) {
+  colorMode = mode;
+  event.target.parentElement.querySelectorAll('.ctrl-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  if (mode === 'region' && brain3dData) {
+    // Restore original colors
+    const colors = points.geometry.attributes.color.array;
+    colors.set(new Float32Array(brain3dData.colors));
+    points.geometry.attributes.color.needsUpdate = true;
+  }
+}
+
+function toggleLabel(type) {
+  event.target.classList.toggle('active');
+  if (type === 'kc') showKC = !showKC;
+  if (type === 'retina') showRetina = !showRetina;
+}
+
+function setSlowmo(x) {
+  slowmo = x;
+  event.target.parentElement.querySelectorAll('.ctrl-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+}
+
+// ============ EYE CHART (photoreceptor overlay) ============
+function drawEyeChart() {
+  const canvas = document.getElementById('eyeChart');
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth, h = canvas.clientHeight || 200;
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = '#0a0d18';
+  ctx.fillRect(0, 0, w, h);
+
+  if (!klines.length) return;
+  const data = klines.slice(-80);
+  const closes = data.map(k => k.c);
+  const min = Math.min(...closes), max = Math.max(...closes);
+  const range = max - min || 1;
+  const pad = 16;
+
+  // Grid
+  ctx.strokeStyle = 'rgba(77,208,225,0.1)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = pad + (h - pad*2) / 4 * i;
+    ctx.beginPath(); ctx.moveTo(pad, y); ctx.lineTo(w - pad, y); ctx.stroke();
+  }
+
+  // Price line
+  ctx.strokeStyle = 'rgba(77,208,225,0.6)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  closes.forEach((c, i) => {
+    const x = pad + (w - pad*2) / (closes.length - 1) * i;
+    const y = pad + (h - pad*2) - (c - min) / range * (h - pad*2);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+
+  // Photoreceptor dots
+  if (brain3dData && brain3dData.retina_uv) {
+    const uv = brain3dData.retina_uv;
+    const lastClose = closes[closes.length - 1];
+    const priceLevel = pad + (h - pad*2) - (lastClose - min) / range * (h - pad*2);
+    uv.forEach((pt, i) => {
+      const x = pad + pt[0] * (w - pad*2);
+      const y = pad + pt[1] * (h - pad*2);
+      // Brightness based on distance from price line (simulated luminance)
+      const dist = Math.abs(y - priceLevel) / (h - pad*2);
+      const brightness = Math.max(0.1, 1 - dist * 2);
+      const blink = 0.7 + 0.3 * Math.sin(animTime * 4 + i * 0.05);
+      ctx.fillStyle = `rgba(255,255,255,${brightness * blink * 0.7})`;
+      ctx.beginPath();
+      ctx.arc(x, y, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+
+  // Price label
+  const last = data[data.length - 1];
+  ctx.fillStyle = '#4dd0e1';
+  ctx.font = '11px "JetBrains Mono", monospace';
+  ctx.fillText('BTC $' + last.c.toFixed(2), pad, 14);
+  document.getElementById('eyePrice').textContent = 'BID ' + last.c.toFixed(2) + '  ASK ' + (last.c * 1.0001).toFixed(2);
+}
+
+// ============ KLINE CANDLESTICK CHART ============
+function drawKlineChart() {
+  const canvas = document.getElementById('klineChart');
+  if (!canvas) return; // TradingView chart active, skip canvas draw
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth, h = Math.max(350, canvas.clientHeight || 400);
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = '#0a0d18';
+  ctx.fillRect(0, 0, w, h);
+
+  if (!klines.length) return;
+  const data = klines.slice(-100);
+  const highs = data.map(k => k.h), lows = data.map(k => k.l);
+  const max = Math.max(...highs), min = Math.min(...lows);
+  const range = max - min || 1;
+  const padL = 70, padR = 16, padT = 20, padB = 50;
+  const chartW = w - padL - padR, chartH = h - padT - padB;
+  const volH = 36;
+  const priceH = chartH - volH - 6;
+  const maxVol = Math.max(...data.map(k => k.v), 1);
+  const cw = chartW / data.length;
+
+  // Grid + price labels
+  ctx.strokeStyle = 'rgba(77,208,225,0.08)';
+  ctx.lineWidth = 1;
+  ctx.fillStyle = '#6b7394';
+  ctx.font = '10px "JetBrains Mono", monospace';
+  const priceFmt = p => p < 0.01 ? p.toFixed(8) : p < 1 ? p.toFixed(4) : p.toFixed(2);
+  for (let i = 0; i <= 5; i++) {
+    const y = padT + priceH / 5 * i;
+    const price = max - range / 5 * i;
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(w - padR, y); ctx.stroke();
+    ctx.fillText('$' + priceFmt(price), 4, y + 3);
+  }
+
+  // Candles
+  data.forEach((k, i) => {
+    const x = padL + cw * i + cw / 2;
+    const isUp = k.c >= k.o;
+    const color = isUp ? '#26de81' : '#fc5c65';
+    const yH = padT + (max - k.h) / range * priceH;
+    const yL = padT + (max - k.l) / range * priceH;
+    const yO = padT + (max - k.o) / range * priceH;
+    const yC = padT + (max - k.c) / range * priceH;
+    // Wick
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x, yH); ctx.lineTo(x, yL); ctx.stroke();
+    // Body
+    const bodyTop = Math.min(yO, yC);
+    const bodyH = Math.max(1, Math.abs(yC - yO));
+    ctx.fillStyle = color;
+    ctx.fillRect(x - cw * 0.35, bodyTop, cw * 0.7, bodyH);
+    // Volume
+    const vh = k.v / maxVol * volH;
+    ctx.fillStyle = isUp ? 'rgba(38,222,129,0.4)' : 'rgba(252,92,101,0.4)';
+    ctx.fillRect(x - cw * 0.35, padT + priceH + 6 + (volH - vh), cw * 0.7, vh);
+  });
+
+  // Current price line
+  const lastC = data[data.length - 1].c;
+  const yLast = padT + (max - lastC) / range * priceH;
+  ctx.strokeStyle = 'rgba(254,211,48,0.5)';
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath(); ctx.moveTo(padL, yLast); ctx.lineTo(w - padR, yLast); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = '#fed330';
+  ctx.fillRect(w - padR - 56, yLast - 9, 56, 18);
+  ctx.fillStyle = '#000';
+  ctx.font = 'bold 11px "JetBrains Mono", monospace';
+  ctx.fillText('$' + priceFmt(lastC), w - padR - 50, yLast + 4);
+
+  // Buy/Sell trade markers on K-line (green = BUY, red = SELL)
+  const filledTrades = events.filter(ev => ev.execution && ev.execution.status === 'FILLED');
+  filledTrades.forEach(ev => {
+    const side = ev.neural ? ev.neural.side : '';
+    // Get execution price: try execution.price, then quote/base, then quote.bid
+    let price = 0;
+    if (ev.execution && ev.execution.price) price = parseFloat(ev.execution.price);
+    else if (ev.execution && ev.execution.quote && ev.execution.base) {
+      const q = parseFloat(ev.execution.quote);
+      const b = parseFloat(ev.execution.base);
+      if (b > 0) price = q / b;
+    }
+    if (!price && ev.quote && ev.quote.bid) price = parseFloat(ev.quote.bid);
+    if (!price || !side) return;
+    // Find closest candle index by time
+    const evTime = ev.wall_time ? ev.wall_time * 1000 : 0;
+    let closestIdx = -1, minDiff = Infinity;
+    data.forEach((k, i) => {
+      if (k.t && evTime) {
+        const diff = Math.abs(k.t - evTime);
+        if (diff < minDiff) { minDiff = diff; closestIdx = i; }
+      }
+    });
+    if (closestIdx < 0) return;
+    const x = padL + cw * closestIdx + cw / 2;
+    const y = padT + (max - price) / range * priceH;
+    if (side === 'BUY') {
+      // Green circle below candle
+      ctx.fillStyle = 'rgba(38,222,129,0.9)';
+      ctx.beginPath();
+      ctx.arc(x, y + 14, 9, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.fillStyle = '#000';
+      ctx.font = 'bold 11px monospace';
+      ctx.fillText('B', x - 3.5, y + 18);
+    } else if (side === 'SELL') {
+      // Red circle above candle
+      ctx.fillStyle = 'rgba(252,92,101,0.9)';
+      ctx.beginPath();
+      ctx.arc(x, y - 14, 9, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.fillStyle = '#000';
+      ctx.font = 'bold 11px monospace';
+      ctx.fillText('S', x - 3.5, y - 10);
+    }
+  });
+
+  // CZSC 缠论 structures overlay
+  if (czscStructures && (czscStructures.fractals.length || czscStructures.strokes.length || czscStructures.pivots.length)) {
+    const offset = klines.length - data.length; // index offset for displayed slice
+    const idxToX = idx => padL + cw * (idx - offset) + cw / 2;
+    const priceToY = p => padT + (max - p) / range * priceH;
+
+    // Draw pivot zones (中枢) - semi-transparent rectangles
+    (czscStructures.pivots || []).forEach(zs => {
+      const x1 = idxToX(zs.start_index);
+      const x2 = idxToX(zs.end_index);
+      const y1 = priceToY(zs.high);
+      const y2 = priceToY(zs.low);
+      if (x2 > padL && x1 < w - padR) {
+        ctx.fillStyle = 'rgba(168, 85, 247, 0.12)';
+        ctx.fillRect(Math.max(padL, x1), y1, Math.min(w - padR, x2) - Math.max(padL, x1), y2 - y1);
+        ctx.strokeStyle = 'rgba(168, 85, 247, 0.5)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 3]);
+        ctx.strokeRect(Math.max(padL, x1), y1, Math.min(w - padR, x2) - Math.max(padL, x1), y2 - y1);
+        ctx.setLineDash([]);
+        // Label
+        ctx.fillStyle = 'rgba(168, 85, 247, 0.8)';
+        ctx.font = '9px "JetBrains Mono", monospace';
+        ctx.fillText('中樞', Math.max(padL, x1) + 4, y1 + 12);
+      }
+    });
+
+    // Draw strokes (笔) - thick lines
+    (czscStructures.strokes || []).forEach(bi => {
+      const x1 = idxToX(bi.start_index);
+      const x2 = idxToX(bi.end_index);
+      const y1 = priceToY(bi.start_price);
+      const y2 = priceToY(bi.end_price);
+      if (x2 >= padL && x1 <= w - padR) {
+        ctx.strokeStyle = bi.direction === 'up' ? 'rgba(38, 222, 129, 0.7)' : 'rgba(252, 92, 101, 0.7)';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(Math.max(padL, x1), y1);
+        ctx.lineTo(Math.min(w - padR, x2), y2);
+        ctx.stroke();
+      }
+    });
+
+    // Draw fractals (分型) - markers
+    (czscStructures.fractals || []).forEach(fx => {
+      const x = idxToX(fx.index);
+      if (x >= padL && x <= w - padR) {
+        const y = priceToY(fx.price);
+        if (fx.type === 'top') {
+          // Top fractal: red downward arrow
+          ctx.fillStyle = 'rgba(252, 92, 101, 0.9)';
+          ctx.beginPath();
+          ctx.moveTo(x, y - 8);
+          ctx.lineTo(x - 5, y - 16);
+          ctx.lineTo(x + 5, y - 16);
+          ctx.closePath();
+          ctx.fill();
+        } else {
+          // Bottom fractal: green upward arrow
+          ctx.fillStyle = 'rgba(38, 222, 129, 0.9)';
+          ctx.beginPath();
+          ctx.moveTo(x, y + 8);
+          ctx.lineTo(x - 5, y + 16);
+          ctx.lineTo(x + 5, y + 16);
+          ctx.closePath();
+          ctx.fill();
+        }
+      }
+    });
+
+    // CZSC legend
+    ctx.fillStyle = 'rgba(168, 85, 247, 0.9)';
+    ctx.font = '10px "JetBrains Mono", monospace';
+    const czscSig = czscStructures.signal || '';
+    ctx.fillText('纏論: ' + czscSig, padL + 4, padT + 14);
+  }
+
+  // Time labels
+  ctx.fillStyle = '#6b7394';
+  ctx.font = '9px "JetBrains Mono", monospace';
+  for (let i = 0; i < data.length; i += 20) {
+    const x = padL + cw * i + cw / 2;
+    const d = new Date(data[i].t);
+    const label = d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
+    ctx.fillText(label, x - 14, h - 8);
+  }
+
+  // Info
+  const prev = data[data.length - 2];
+  const chg = lastC - prev.c;
+  const chgPct = (chg / prev.c * 100);
+  document.getElementById('klineInfo').textContent =
+    `${currentTimeframe.toUpperCase()} · ${data.length} 根 · 開 $${priceFmt(data[0].o)} 高 $${priceFmt(max)} 低 $${priceFmt(min)} 收 $${priceFmt(lastC)} · 變動 ${chg >= 0 ? '+' : ''}${chgPct.toFixed(2)}%`;
+}
+
+// ============ NEURAL HEATMAP ============
+let heatmapOn = false;
+let heatmapTime = 0;
+let heatmapActive = null; // precomputed active neurons sorted by spike
+let heatmapBounds = null;
+
+function toggleHeatmap() {
+  heatmapOn = !heatmapOn;
+  const btn = document.getElementById('heatmapBtn');
+  const hm = document.getElementById('heatmap');
+  const b3d = document.getElementById('brain3d');
+  if (heatmapOn) {
+    btn.classList.add('active');
+    hm.style.display = 'block';
+    b3d.style.opacity = '0.1';
+  } else {
+    btn.classList.remove('active');
+    hm.style.display = 'none';
+    b3d.style.opacity = '1';
+  }
+}
+
+function thermalRGBA(t, alpha) {
+  t = Math.max(0, Math.min(1, t));
+  let r, g, b;
+  if (t < 0.2) { const s = t / 0.2; r = 0; g = 0; b = 80 + 175 * s; }
+  else if (t < 0.4) { const s = (t - 0.2) / 0.2; r = 0; g = 200 * s; b = 255; }
+  else if (t < 0.6) { const s = (t - 0.4) / 0.2; r = 0; g = 255; b = 255 * (1 - s); }
+  else if (t < 0.8) { const s = (t - 0.6) / 0.2; r = 255 * s; g = 255; b = 0; }
+  else { const s = (t - 0.8) / 0.2; r = 255; g = 255 * (1 - s * 0.6); b = 100 * s; }
+  return `rgba(${Math.floor(r)},${Math.floor(g)},${Math.floor(b)},${alpha})`;
+}
+
+function prepareHeatmapData() {
+  if (!brain3dData) return;
+  const pos = brain3dData.positions;
+  const spikes = brain3dData.spikes;
+  const n = spikes.length;
+  // Compute bounds
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  const active = [];
+  for (let i = 0; i < n; i++) {
+    const x = pos[i*3], y = pos[i*3+1], s = spikes[i];
+    if (x < minX) minX = x; if (x > maxX) maxX = x;
+    if (y < minY) minY = y; if (y > maxY) maxY = y;
+    if (s > 0) active.push({ x, y, s });
+  }
+  active.sort((a, b) => b.s - a.s);
+  heatmapActive = active;
+  heatmapBounds = { minX, maxX, minY, maxY };
+}
+
+function drawHeatmap() {
+  const canvas = document.getElementById('heatmap');
+  if (!canvas || !heatmapOn || !brain3dData) return;
+  if (!heatmapActive) prepareHeatmapData();
+  if (!heatmapActive || !heatmapBounds) return;
+
+  const ctx = canvas.getContext('2d');
+  const parent = canvas.parentElement;
+  const w = parent ? parent.clientWidth : canvas.clientWidth;
+  const h = 480;
+  if (w < 10) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+  if (canvas.width !== Math.floor(w * dpr)) {
+    canvas.width = Math.floor(w * dpr);
+    canvas.height = Math.floor(h * dpr);
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  // Background
+  const bg = ctx.createRadialGradient(w/2, h/2, 0, w/2, h/2, w*0.7);
+  bg.addColorStop(0, '#0f0a1a');
+  bg.addColorStop(1, '#050308');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, w, h);
+
+  const { minX, maxX, minY, maxY } = heatmapBounds;
+  const rangeX = maxX - minX || 1, rangeY = maxY - minY || 1;
+  const pad = 40;
+  const mapX = x => pad + (x - minX) / rangeX * (w - pad * 2);
+  const mapY = y => h - pad - (y - minY) / rangeY * (h - pad * 2);
+  const maxS = heatmapActive.length ? heatmapActive[0].s : 1;
+
+  // Draw active neurons as thermal radial gradients (top 6000 for perf)
+  const limit = Math.min(heatmapActive.length, 6000);
+  ctx.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < limit; i++) {
+    const neuron = heatmapActive[i];
+    const intensity = Math.pow(neuron.s / maxS, 0.6);
+    const x = mapX(neuron.x);
+    const y = mapY(neuron.y);
+    const radius = 4 + intensity * 18;
+    const blink = 0.75 + 0.25 * Math.sin(heatmapTime * 2.5 + i * 0.08);
+    const alpha = intensity * 0.35 * blink;
+    const grad = ctx.createRadialGradient(x, y, 0, x, y, radius);
+    grad.addColorStop(0, thermalRGBA(intensity, alpha));
+    grad.addColorStop(0.5, thermalRGBA(intensity * 0.7, alpha * 0.5));
+    grad.addColorStop(1, thermalRGBA(intensity * 0.3, 0));
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalCompositeOperation = 'source-over';
+
+  // Signal propagation waves
+  const keyCells = brain3dData.key_cells || {};
+  const waveSources = [
+    { label: '視網膜輸入', x: mapX(minX + rangeX * 0.15), y: mapY(minY + rangeY * 0.5), color: '77,208,225' },
+  ];
+  if (keyCells.KC && keyCells.KC.position) waveSources.push({ label: 'KC', x: mapX(keyCells.KC.position[0]), y: mapY(keyCells.KC.position[1]), color: '254,211,48' });
+  if (keyCells.DNp20 && keyCells.DNp20.position) waveSources.push({ label: 'DNp20', x: mapX(keyCells.DNp20.position[0]), y: mapY(keyCells.DNp20.position[1]), color: '255,107,157' });
+  if (keyCells.PAM11 && keyCells.PAM11.position) waveSources.push({ label: 'PAM11', x: mapX(keyCells.PAM11.position[0]), y: mapY(keyCells.PAM11.position[1]), color: '38,222,129' });
+
+  waveSources.forEach((ws, idx) => {
+    for (let wv = 0; wv < 2; wv++) {
+      const phase = (heatmapTime * 0.6 + idx * 0.25 + wv * 0.5) % 1;
+      const radius = phase * 100;
+      const alpha = (1 - phase) * 0.35;
+      ctx.strokeStyle = `rgba(${ws.color},${alpha})`;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(ws.x, ws.y, radius, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  });
+
+  // Transmission paths
+  const getPos = name => {
+    if (name === 'retina') return [mapX(minX + rangeX * 0.12), mapY(minY + rangeY * 0.5)];
+    const kc = keyCells[name];
+    if (kc && kc.position) return [mapX(kc.position[0]), mapY(kc.position[1])];
+    return null;
+  };
+  const paths = [['retina','KC'],['KC','MBON07'],['MBON07','DNp20'],['PAM11','KC'],['PPL101','KC']];
+  paths.forEach(([from, to]) => {
+    const p1 = getPos(from), p2 = getPos(to);
+    if (!p1 || !p2) return;
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 5]);
+    ctx.beginPath(); ctx.moveTo(p1[0], p1[1]); ctx.lineTo(p2[0], p2[1]); ctx.stroke();
+    ctx.setLineDash([]);
+    const flow = (heatmapTime * 0.4 + paths.indexOf([from,to]) * 0.1) % 1;
+    const px = p1[0] + (p2[0] - p1[0]) * flow;
+    const py = p1[1] + (p2[1] - p1[1]) * flow;
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.beginPath(); ctx.arc(px, py, 2, 0, Math.PI * 2); ctx.fill();
+  });
+
+  // Region labels
+  const labels = [
+    { text: '視網膜神經元', x: mapX(minX + rangeX * 0.1), y: mapY(minY + rangeY * 0.85), color: '#4dd0e1' },
+    { text: '獎勵 KC', x: mapX(minX + rangeX * 0.45), y: mapY(minY + rangeY * 0.7), color: '#fed330' },
+    { text: '決策神經元', x: mapX(minX + rangeX * 0.6), y: mapY(minY + rangeY * 0.4), color: '#a55eea' },
+    { text: '決策輸出 DNp20', x: mapX(minX + rangeX * 0.75), y: mapY(minY + rangeY * 0.2), color: '#ff6b9d' },
+  ];
+  labels.forEach(l => {
+    ctx.font = '11px "Noto Sans TC", sans-serif';
+    ctx.fillStyle = l.color;
+    ctx.globalAlpha = 0.85;
+    ctx.fillText(l.text, l.x, l.y);
+    ctx.globalAlpha = 1;
+  });
+
+  // Color legend
+  const legX = w - 140, legY = h - 35;
+  const grad = ctx.createLinearGradient(legX, legY, legX + 100, legY);
+  ['#000050','#0000ff','#00ffff','#00ff00','#ffff00','#ff0000','#ffffff'].forEach((c,i) => grad.addColorStop(i/6, c));
+  ctx.fillStyle = grad;
+  ctx.fillRect(legX, legY, 100, 8);
+  ctx.fillStyle = '#6b7394';
+  ctx.font = '9px "JetBrains Mono", monospace';
+  ctx.fillText('低', legX - 14, legY + 8);
+  ctx.fillText('高', legX + 104, legY + 8);
+    ctx.fillText('放電強度熱力圖', legX + 10, legY - 5);
+
+  // Stats
+  ctx.fillStyle = '#dfe6f0';
+  ctx.font = 'bold 12px "JetBrains Mono", monospace';
+  ctx.fillText(`活躍: ${heatmapActive.length.toLocaleString()} / ${brain3dData.n_neurons.toLocaleString()} 神經元`, 12, 22);
+  ctx.fillStyle = '#6b7394';
+  ctx.font = '10px "JetBrains Mono", monospace';
+  ctx.fillText('神經傳遞熱力圖 · 放電強度越高越亮 · 點擊神經元查看', 12, 38);
+}
+
+// ============ DATA FETCH ============
+let brainFetching = false;
+async function fetchBrain3d() {
+  if (brainFetching) return;  // prevent concurrent fetches
+  if (brainCollapsed && brain3dData) return;  // skip if collapsed and already loaded
+  brainFetching = true;
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000);  // 60s timeout
+    const res = await fetch('/api/brain3d', { signal: controller.signal });
+    clearTimeout(timeoutId);
+    brain3dData = await res.json();
+    heatmapActive = null;
+    if (!points) initBrain();
+    loadBrainPoints();
+    const bi = document.getElementById('brainInfo');
+    if (bi && brain3dData) bi.textContent = '';
+  } catch(e) {
+    console.error('brain3d error', e);
+    const bl = document.getElementById('brainLoading');
+    if (bl) bl.style.display = 'none';
+    const bi = document.getElementById('brainInfo');
+    if (bi) bi.textContent = '';
+  } finally {
+    brainFetching = false;
+  }
+}
+// Hide loading after 30s regardless
+setTimeout(() => {
+  const bl = document.getElementById('brainLoading');
+  if (bl && bl.style.display !== 'none') bl.style.display = 'none';
+}, 30000);
+
+async function fetchState() {
+  try {
+    const res = await fetch('/api/state');
+    state = await res.json();
+    events = state.events || [];
+    updateTradeMarkersBar();
+    updateWatchdog();
+    updateChanLearning();
+    // Set simulation timer from brain boot time (first event wall_time)
+    if (state.events && state.events.length && state.events[0].wall_time) {
+      const brainStartTime = state.events[0].wall_time * 1000;
+      if (Math.abs(brainStartTime - simStartTime) > 5000) simStartTime = brainStartTime;
+    }
+    updateUI();
+  } catch(e) { console.error('state error', e); }
+}
+
+let currentTimeframe = '1m';
+
+function setTimeframe(tf) {
+  currentTimeframe = tf;
+  ['1m','5m','15m','30m','1h','4h','8h','1d'].forEach(t => {
+    const el = document.getElementById('tf' + t);
+    if (el) el.classList.toggle('active', tf === t);
+  });
+  // Completely destroy and recreate chart
+  try { if (tvChart) { tvChart.remove(); } } catch(e) { console.warn('remove err', e); }
+  const container = document.getElementById('tvChartContainer');
+  if (container) container.innerHTML = '';
+  tvChart = null;
+  tvCandleSeries = null;
+  tvVolumeSeries = null;
+
+  czscStructures = null;
+  czscKlineData = null;
+  klines = [];
+  chanStrokeSeries.forEach(s => { try { tvChart.removeSeries(s); } catch(e) {} });
+  chanStrokeSeries = [];
+  const po = document.getElementById('pivotOverlay');
+  if (po) { const ctx = po.getContext('2d'); ctx.clearRect(0, 0, po.width, po.height); }
+  console.log('[setTimeframe] switching to', tf, 'chart reset');
+  loadTradingView(tf);
+  fetchKlines();
+}
+
+// Auto-rotate timeframes every 15 seconds
+const TF_ROTATE_LIST = ['1m', '5m', '15m', '30m', '1h', '4h', '8h', '1d'];
+let tfAutoRotate = true;
+let tfRotateIndex = 0;
+let tfRotateTimer = null;
+
+// Real-time Binance price (updates every 2s, independent of simulation steps)
+let liveBtcPrice = 0;
+let lastTradeCount = 0;
+let livePriceTimer = null;
+
+function fetchLivePrice() {
+  fetch('/api/token')
+    .then(r => r.json())
+    .then(d => {
+      if (d && d.price) {
+        liveBtcPrice = parseFloat(d.price);
+      }
+    })
+    .catch(() => {});
+}
+
+function startLivePrice() {
+  if (livePriceTimer) clearInterval(livePriceTimer);
+  fetchLivePrice();
+  livePriceTimer = setInterval(fetchLivePrice, 2000);
+}
+
+setTimeout(startLivePrice, 2000);
+
+function tfStartRotate() {
+  if (tfRotateTimer) clearInterval(tfRotateTimer);
+  tfRotateTimer = setInterval(function() {
+    if (!tfAutoRotate) return;
+    tfRotateIndex = (tfRotateIndex + 1) % TF_ROTATE_LIST.length;
+    setTimeframe(TF_ROTATE_LIST[tfRotateIndex]);
+  }, 15000);
+}
+
+function toggleAutoRotate() {
+  tfAutoRotate = !tfAutoRotate;
+  const btn = document.getElementById('autoRotateBtn');
+  if (btn) {
+    if (tfAutoRotate) {
+      btn.style.background = 'rgba(0,210,211,0.2)';
+      btn.style.borderColor = '#00d2d3';
+      btn.style.color = '#00d2d3';
+      btn.textContent = '↻ 自動15s';
+    } else {
+      btn.style.background = 'rgba(255,255,255,0.05)';
+      btn.style.borderColor = 'var(--border)';
+      btn.style.color = 'var(--dim)';
+      btn.textContent = '↻ 已暫停';
+    }
+  }
+}
+
+setTimeout(tfStartRotate, 5000);
+
+let tvChart = null;
+let tvCandleSeries = null;
+let tvVolumeSeries = null;
+let chanStrokeSeries = []; // each stroke gets its own colored series
+
+// Neural synapse connections & firing impulses
+let synapseLines = null;
+let impulseParticles = null;
+let impulseData = []; // {fromIdx, toIdx, progress, speed}
+const MAX_CONNECTED_NEURONS = 400;
+const MAX_IMPULSES = 80;
+// pivot drawing removed - shown in signal text only
+
+function initTvChart() {
+  if (tvChart || typeof LightweightCharts === 'undefined') return;
+  const container = document.getElementById('tvChartContainer');
+  if (!container) return;
+  tvChart = LightweightCharts.createChart(container, {
+    layout: { background: { color: '#0a0d18' }, textColor: '#6b7394', fontSize: 11 },
+    grid: { vertLines: { color: 'rgba(77,208,225,0.06)' }, horzLines: { color: 'rgba(77,208,225,0.06)' } },
+    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+    rightPriceScale: { borderColor: 'rgba(77,208,225,0.2)' },
+    timeScale: { borderColor: 'rgba(77,208,225,0.2)', timeVisible: true, secondsVisible: false },
+    width: container.clientWidth,
+    height: container.clientHeight || 480,
+  });
+  tvCandleSeries = tvChart.addCandlestickSeries({
+    upColor: '#26de81', downColor: '#fc5c65',
+    borderUpColor: '#26de81', borderDownColor: '#fc5c65',
+    wickUpColor: '#26de81', wickDownColor: '#fc5c65',
+  });
+  // Volume on its own price scale (won't compress candles)
+  try {
+    tvVolumeSeries = tvChart.addHistogramSeries({
+      priceFormat: { type: 'volume' },
+      priceScaleId: 'vol',
+    });
+    tvChart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
+  } catch(e) { console.warn('volume series init error', e); }
+  // Chan stroke series created dynamically per-stroke in updateTvChart
+  // Redraw pivot overlay on scroll/zoom
+  try {
+    tvChart.timeScale().subscribeVisibleLogicalRangeChange(() => { drawPivotOverlay(); });
+  } catch(e) {}
+}
+
+function loadTradingView(tf) {
+  initTvChart();
+  if (!tvChart) return;
+  // Data loaded via fetchKlines -> updateTvChart
+}
+
+function updateTvChart(data, czscStructures) {
+  try {
+    if (!tvCandleSeries || !data || !data.length) return;
+
+    // 1. Candles
+    const candles = data.map(k => ({
+      time: Math.floor(k.t / 1000),
+      open: k.o, high: k.h, low: k.l, close: k.c,
+    }));
+    tvCandleSeries.setData(candles);
+    czscKlineData = data;
+    setTimeout(drawPivotOverlay, 50);
+
+    // 2. Volume
+    try {
+      if (tvVolumeSeries) {
+        const volumes = data.map(k => ({
+          time: Math.floor(k.t / 1000),
+          value: k.v,
+          color: k.c >= k.o ? 'rgba(38,222,129,0.4)' : 'rgba(252,92,101,0.4)',
+        }));
+        tvVolumeSeries.setData(volumes);
+      }
+    } catch(e) { console.warn('volume setData error', e); }
+
+    // 3. Chan stroke lines - each stroke gets its own colored series (green=up, red=down)
+    try {
+      chanStrokeSeries.forEach(s => { try { tvChart.removeSeries(s); } catch(e) {} });
+      chanStrokeSeries = [];
+      if (czscStructures && czscStructures.strokes && czscStructures.strokes.length > 0) {
+        czscStructures.strokes.forEach(s => {
+          const si = Math.max(0, Math.min(s.start_index, data.length - 1));
+          const ei = Math.max(0, Math.min(s.end_index, data.length - 1));
+          if (data[si] && data[ei] && si !== ei) {
+            const t1 = Math.floor(data[si].t / 1000);
+            const t2 = Math.floor(data[ei].t / 1000);
+            const p1 = parseFloat(s.start_price);
+            const p2 = parseFloat(s.end_price);
+            if (isNaN(p1) || isNaN(p2)) return;
+            const isUp = p2 >= p1;
+            const strokeS = tvChart.addLineSeries({
+              color: isUp ? '#2ed573' : '#ff4757',
+              lineWidth: 2.5,
+              priceLineVisible: false,
+              lastValueVisible: false,
+            });
+            strokeS.setData([{time: t1, value: p1}, {time: t2, value: p2}]);
+            chanStrokeSeries.push(strokeS);
+          }
+        });
+      }
+    } catch(e) { console.warn('chan stroke error', e); }
+
+    // 4. Pivot info shown in signal text only (no custom drawing)
+
+    // 5. CZSC signal text + professional info bar
+    try {
+      const czscSigEl = document.getElementById('czscSignal');
+      if (czscSigEl && czscStructures && czscStructures.signal) {
+        czscSigEl.textContent = '纏論: ' + czscStructures.signal;
+      }
+      // Professional chan info bar
+      if (czscStructures) {
+        const trendEl = document.getElementById('chanTrend');
+        const strokeEl = document.getElementById('chanStroke');
+        const pivotEl = document.getElementById('chanPivot');
+        const divEl = document.getElementById('chanDiv');
+        const sigEl = document.getElementById('chanSig');
+        const sugEl = document.getElementById('chanSuggestion');
+        // Trend
+        if (trendEl && czscStructures.trend) {
+          trendEl.textContent = czscStructures.trend;
+          trendEl.style.color = czscStructures.trend === '上升' ? '#2ed573' : czscStructures.trend === '下降' ? '#ff4757' : '#fed330';
+        }
+        // Current stroke
+        if (strokeEl && czscStructures.current_stroke) {
+          const cs = czscStructures.current_stroke;
+          const dir = cs.direction === 'up' ? '↑' : '↓';
+          const pct = cs.change_pct ? cs.change_pct.toFixed(2) + '%' : '';
+          strokeEl.textContent = '筆 ' + dir + ' ' + pct;
+          strokeEl.style.color = cs.direction === 'up' ? '#2ed573' : '#ff4757';
+        }
+        // Pivot range
+        if (pivotEl && czscStructures.pivot_range) {
+          const pr = czscStructures.pivot_range;
+          pivotEl.textContent = '中樞 ' + pr.low.toFixed(1) + '~' + pr.high.toFixed(1);
+        }
+        // Divergence
+        if (divEl) {
+          divEl.textContent = '背馳: ' + (czscStructures.divergence || '無');
+          divEl.style.color = czscStructures.divergence ? '#ffa502' : 'var(--dim)';
+        }
+        // Buy/Sell signals
+        if (sigEl) {
+          const buys = (czscStructures.buy_signals || []).map(s => s.type).join(',');
+          const sells = (czscStructures.sell_signals || []).map(s => s.type).join(',');
+          let sigText = [];
+          if (buys) sigText.push('買:' + buys);
+          if (sells) sigText.push('賣:' + sells);
+          sigEl.textContent = '訊號: ' + (sigText.join(' ') || '無');
+          sigEl.style.color = buys ? '#2ed573' : sells ? '#ff4757' : 'var(--dim)';
+        }
+        // Suggestion
+        if (sugEl && czscStructures.suggestion) {
+          sugEl.textContent = '▶ ' + czscStructures.suggestion;
+          if (czscStructures.suggestion.includes('買入')) sugEl.style.color = '#2ed573';
+          else if (czscStructures.suggestion.includes('賣出')) sugEl.style.color = '#ff4757';
+          else if (czscStructures.suggestion.includes('警戒')) sugEl.style.color = '#ffa502';
+          else sugEl.style.color = 'var(--dim)';
+        }
+      }
+    } catch(e) { console.warn('chan info bar error', e); }
+
+    // 6. Markers (fractals + trades, deduplicated)
+    try {
+      const allMarkers = [];
+      // Fractals
+      if (czscStructures && czscStructures.fractals) {
+        czscStructures.fractals.forEach(f => {
+          const idx = Math.min(f.index, data.length - 1);
+          if (idx >= 0 && data[idx]) {
+            allMarkers.push({
+              time: Math.floor(data[idx].t / 1000),
+              position: f.type === 'top' ? 'aboveBar' : 'belowBar',
+              color: f.type === 'top' ? '#ff4757' : '#2ed573',
+              shape: f.type === 'top' ? 'arrowDown' : 'arrowUp',
+              text: '',
+            });
+          }
+        });
+      }
+      // Chan buy/sell signals
+      if (czscStructures && czscStructures.buy_signals) {
+        czscStructures.buy_signals.forEach(s => {
+          const idx = Math.min(s.index, data.length - 1);
+          if (idx >= 0 && data[idx]) {
+            allMarkers.push({
+              time: Math.floor(data[idx].t / 1000),
+              position: 'belowBar',
+              color: '#00d2d3',
+              shape: 'circle',
+              text: s.type || 'B',
+            });
+          }
+        });
+      }
+      if (czscStructures && czscStructures.sell_signals) {
+        czscStructures.sell_signals.forEach(s => {
+          const idx = Math.min(s.index, data.length - 1);
+          if (idx >= 0 && data[idx]) {
+            allMarkers.push({
+              time: Math.floor(data[idx].t / 1000),
+              position: 'aboveBar',
+              color: '#ff6b81',
+              shape: 'circle',
+              text: s.type || 'S',
+            });
+          }
+        });
+      }
+      // Trade markers
+      const filled = (events || []).filter(ev => ev.execution && ev.execution.status === 'FILLED');
+      filled.forEach(ev => {
+        const side = ev.neural ? ev.neural.side : '';
+        let price = 0;
+        if (ev.execution && ev.execution.quote && ev.execution.base) {
+          const q = parseFloat(ev.execution.quote);
+          const b = parseFloat(ev.execution.base);
+          if (b > 0) price = q / b;
+        }
+        if (!price && ev.quote && ev.quote.bid) price = parseFloat(ev.quote.bid);
+        if (!price || !side || !ev.wall_time) return;
+        const tfSecMap = {'1m':60,'5m':300,'15m':900,'30m':1800,'1h':3600,'4h':14400,'8h':28800,'1d':86400};
+        const tfSec = tfSecMap[currentTimeframe] || 900;
+        const t = Math.floor(ev.wall_time / tfSec) * tfSec;
+        allMarkers.push({
+          time: t,
+          position: side === 'BUY' ? 'belowBar' : 'aboveBar',
+          color: side === 'BUY' ? '#00d4ff' : '#ff9500',
+          shape: 'circle',
+          text: side === 'BUY' ? 'B' : 'S',
+        });
+      });
+      // Deduplicate by time+position (trade markers priority)
+      const seen = new Set();
+      const uniqueMarkers = [];
+      const tradeMs = allMarkers.filter(m => m.text === 'B' || m.text === 'S');
+      const otherMs = allMarkers.filter(m => m.text !== 'B' && m.text !== 'S');
+      for (const m of [...tradeMs, ...otherMs]) {
+        const key = m.time + '|' + m.position;
+        if (!seen.has(key)) { seen.add(key); uniqueMarkers.push(m); }
+      }
+      uniqueMarkers.sort((a, b) => a.time - b.time);
+      tvCandleSeries.setMarkers(uniqueMarkers);
+    } catch(e) { console.warn('markers error', e); }
+
+    // 7. Resize + fit
+    try {
+      const el = document.getElementById('tvChartContainer');
+      if (el) tvChart.applyOptions({ width: el.clientWidth, height: el.clientHeight });
+      tvChart.timeScale().fitContent();
+    } catch(e) {}
+
+    // 8. Info bar
+    if (data.length > 0) {
+      const max = Math.max(...data.map(k => k.h));
+      const min = Math.min(...data.map(k => k.l));
+      const lastC = data[data.length-1].c;
+      const chg = data[data.length-1].c - data[0].o;
+      const chgPct = (chg / data[0].o) * 100;
+      const info = document.getElementById('klineInfo');
+      if (info) info.textContent = `${currentTimeframe.toUpperCase()} · ${data.length} 根 · 開 $${data[0].o.toFixed(2)} 高 $${max.toFixed(2)} 低 $${min.toFixed(2)} 收 $${lastC.toFixed(2)} · 變動 ${chg >= 0 ? '+' : ''}${chgPct.toFixed(2)}%`;
+    }
+  } catch(e) {
+    console.error('[updateTvChart] FATAL', e);
+  }
+}
+
+// Draw pivot filled rectangles on overlay canvas (like old Canvas version)
+function drawPivotOverlay() {
+  try {
+    const canvas = document.getElementById('pivotOverlay');
+    if (!canvas || !tvChart || !tvCandleSeries || !czscStructures || !czscStructures.pivots || !czscStructures.pivots.length) {
+      if (canvas) { const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, canvas.width, canvas.height); }
+      return;
+    }
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, rect.width, rect.height);
+
+    // Get chart container offset (price scale on right takes space)
+    const chartContainer = document.getElementById('tvChartContainer');
+    const chartRect = chartContainer.getBoundingClientRect();
+    const overlayRect = canvas.getBoundingClientRect();
+    const offsetX = chartRect.left - overlayRect.left;
+    const offsetY = chartRect.top - overlayRect.top;
+
+    czscStructures.pivots.forEach(zs => {
+      if (!czscKlineData || !czscKlineData.length) return;
+      const x1 = Math.max(0, Math.min(zs.start_index, czscKlineData.length - 1));
+      const x2 = Math.max(0, Math.min(zs.end_index, czscKlineData.length - 1));
+      if (x1 === x2) return;
+      const t1 = Math.floor(czscKlineData[x1].t / 1000);
+      const t2 = Math.floor(czscKlineData[x2].t / 1000);
+      const hi = parseFloat(zs.high);
+      const lo = parseFloat(zs.low);
+      if (isNaN(hi) || isNaN(lo) || hi <= lo) return;
+
+      const px1 = tvChart.timeScale().timeToCoordinate(t1);
+      const px2 = tvChart.timeScale().timeToCoordinate(t2);
+      const pyHi = tvCandleSeries.priceToCoordinate(hi);
+      const pyLo = tvCandleSeries.priceToCoordinate(lo);
+
+      if (px1 === null || px2 === null || pyHi === null || pyLo === null) return;
+
+      const rx = offsetX + px1;
+      const ry = offsetY + Math.min(pyHi, pyLo);
+      const rw = Math.abs(px2 - px1);
+      const rh = Math.abs(pyLo - pyHi);
+
+      if (rw < 2 || rh < 2) return;
+
+      // Filled rectangle (semi-transparent purple)
+      ctx.fillStyle = 'rgba(168, 85, 247, 0.15)';
+      ctx.fillRect(rx, ry, rw, rh);
+      // Border (solid purple, 2px)
+      ctx.strokeStyle = '#a855f7';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(rx, ry, rw, rh);
+    });
+  } catch(e) { console.warn('pivot overlay error', e); }
+}
+
+let czscKlineData = null;
+
+function updateTradeMarkersBar() {
+  const listEl = document.getElementById('tradeMarkersList');
+  if (!listEl) return;
+  const filled = events.filter(ev => ev.execution && ev.execution.status === 'FILLED');
+  if (!filled.length) { listEl.textContent = '尚無成交'; return; }
+  const recent = filled.slice(-10);
+  listEl.innerHTML = recent.map(ev => {
+    const side = ev.neural ? ev.neural.side : '';
+    let price = 0;
+    if (ev.execution && ev.execution.quote && ev.execution.base) {
+      const q = parseFloat(ev.execution.quote);
+      const b = parseFloat(ev.execution.base);
+      if (b > 0) price = q / b;
+    }
+    if (!price && ev.quote && ev.quote.bid) price = parseFloat(ev.quote.bid);
+    const color = side === 'BUY' ? '#26de81' : side === 'SELL' ? '#fc5c65' : '#fed330';
+    const time = ev.wall_time ? new Date(ev.wall_time * 1000 + 8*3600*1000).toISOString().substr(11,8) : '';
+    return '<span style="display:inline-flex;align-items:center;gap:3px;">' +
+      '<span style="width:8px;height:8px;border-radius:50%;background:' + color + ';border:1px solid #fff;"></span>' +
+      side + ' $' + price.toFixed(2) + ' ' + time + '</span>';
+  }).join('');
+}
+
+async function fetchKlines() {
+  try {
+    console.log('[fetchKlines] fetching', currentTimeframe);
+    const res = await fetch('/api/binance?interval=' + currentTimeframe);
+    const data = await res.json();
+    console.log('[fetchKlines] got', Array.isArray(data) ? data.length : 'not array', 'candles');
+    if (Array.isArray(data) && data.length) {
+      klines = data;
+      lastBtcPrice = data[data.length - 1].c;
+      drawEyeChart();
+      // Fetch CZSC 缠论 structures for overlay
+      fetch('/api/czsc?interval=' + currentTimeframe)
+        .then(r => r.json())
+        .then(czsc => { czscStructures = czsc; updateTvChart(data, czsc); })
+        .catch(e => console.error('czsc error', e));
+      updateTvChart(data, czscStructures);
+      // Recalculate P&L with live price
+      if (state) {
+        const meta = state.meta || {};
+        const equity = parseFloat(state.latest ? state.latest.equity_usdc : 0) || 0;
+        const initial = parseFloat(meta.initial_cash || 1000);
+        updatePnL(meta, equity, initial);
+      }
+    }
+  } catch(e) { console.error('kline error', e); }
+}
+
+async function fetchTokenInfo() {
+  try {
+    const res = await fetch('/api/token');
+    const data = await res.json();
+    if (data && data.price) {
+      lastBtcPrice = data.price;
+      const chg24h = data.price_change ? data.price_change.h24 : 0;
+      const vol24h = data.volume ? data.volume.h24 : 0;
+      const liq = data.liquidity || 0;
+      const chgColor = chg24h >= 0 ? 'var(--green)' : 'var(--red)';
+      document.getElementById('tokenInfo').innerHTML =
+        `$${data.price.toFixed(2)} · <span style="color:${chgColor}">24h ${chg24h >= 0 ? '+' : ''}${chg24h.toFixed(2)}%</span> · Vol $${(vol24h/1e6).toFixed(1)}M`;
+      if (state) {
+        const meta = state.meta || {};
+        const equity = parseFloat(state.latest ? state.latest.equity_usdc : 0) || 0;
+        const initial = parseFloat(meta.initial_cash || 1000);
+        updatePnL(meta, equity, initial);
+      }
+    }
+  } catch(e) { console.error('token error', e); }
+}
+
+// ============ REAL-TIME P&L ============
+let lastBtcPrice = 0;
+let marketPrice1m = 0;
+
+// Always fetch 1m klines for accurate mark price (independent of displayed timeframe)
+async function fetch1mPrice() {
+  try {
+    const res = await fetch('/api/binance?interval=1m');
+    const data = await res.json();
+    if (Array.isArray(data) && data.length) {
+      marketPrice1m = data[data.length - 1].c;
+      if (state) {
+        const meta = state.meta || {};
+        const equity = parseFloat(state.latest ? state.latest.equity_usdc : 0) || 0;
+        const initial = parseFloat(meta.initial_cash || 1000);
+        updatePnL(meta, equity, initial);
+      }
+    }
+  } catch(e) { console.error('1m price error', e); }
+}
+
+function updatePnL(meta, simEquity, initial) {
+  const cash = meta.cash ? parseFloat(meta.cash) : 0;
+  const positions = meta.positions || {};
+  // Get position amount
+  let btcAmount = 0;
+  for (const [product, amount] of Object.entries(positions)) {
+    if (product.startsWith('BTC') || product.startsWith('BNB') || product.startsWith('PEPE')) btcAmount += parseFloat(amount) || 0;
+  }
+  // Use simulation equity as authoritative (marked at simulation prices)
+  const equity = simEquity > 0 ? simEquity : cash;
+  // Total P&L based on simulation equity
+  const totalPnl = equity - initial;
+  const roi = initial > 0 ? (totalPnl / initial * 100) : 0;
+  // Cost basis = initial - cash (approximate)
+  const costBasis = initial - cash;
+  // Avg entry price
+  const avgPrice = btcAmount > 0 && costBasis > 0 ? costBasis / btcAmount : 0;
+  // Use simulation real-time quote bid price for consistency with equity
+  const simQuote = (state && state.latest && state.latest.quote) ? state.latest.quote : {};
+  // Use live Binance price first, then simulation quote, then K-line price
+  const markPrice = liveBtcPrice > 0 ? liveBtcPrice : (simQuote.bid ? parseFloat(simQuote.bid) : (marketPrice1m > 0 ? marketPrice1m : lastBtcPrice));
+  const simPrice = markPrice;
+  // Position value at real-time bid price
+  const posValue = btcAmount > 0 ? btcAmount * markPrice : 0;
+  // Unrealized P&L based on real-time bid price (same as equity marking)
+  const unrealized = btcAmount > 0 && avgPrice > 0 ? (markPrice - avgPrice) * btcAmount : 0;
+
+  // Position value
+  const posValEl = document.getElementById('posValue');
+  if (posValEl) posValEl.textContent = posValue > 0 ? '$' + posValue.toFixed(4) : '$0.00';
+
+  // Total P&L highlight
+  const pnlBox = document.getElementById('pnlBox');
+  const pnlLive = document.getElementById('pnlLive');
+  const pnlPct = document.getElementById('pnlPct');
+  if (pnlLive) {
+    pnlLive.textContent = (totalPnl >= 0 ? '+' : '') + '$' + totalPnl.toFixed(4);
+    pnlLive.style.color = totalPnl >= 0 ? 'var(--green)' : 'var(--red)';
+  }
+  if (pnlPct) {
+    pnlPct.textContent = (roi >= 0 ? '+' : '') + roi.toFixed(2) + '%';
+    pnlPct.style.color = roi >= 0 ? 'var(--green)' : 'var(--red)';
+  }
+  if (pnlBox) {
+    pnlBox.classList.remove('pnl-profit', 'pnl-loss');
+    pnlBox.classList.add(totalPnl >= 0 ? 'pnl-profit' : 'pnl-loss');
+  }
+
+  // Unrealized P&L
+  const unrlEl = document.getElementById('unrealizedPnl');
+  if (unrlEl) {
+    if (btcAmount > 0) {
+      unrlEl.textContent = (unrealized >= 0 ? '+' : '') + '$' + unrealized.toFixed(4);
+      unrlEl.style.color = unrealized >= 0 ? 'var(--green)' : 'var(--red)';
+    } else {
+      unrlEl.textContent = '$0.00';
+      unrlEl.style.color = 'var(--dim)';
+    }
+  }
+
+  // Take-profit progress (3% threshold)
+  const tpPct = initial > 0 ? (totalPnl / initial * 100) : 0;
+  const tpProgress = Math.min(100, (tpPct / 3) * 100);
+  const tpEl = document.getElementById('tpProgress');
+  const tpBar = document.getElementById('tpBar');
+  const tpBox = document.getElementById('tpBox');
+  if (tpEl) tpEl.textContent = tpPct.toFixed(2) + '% / 3%';
+  if (tpBar) tpBar.style.width = tpProgress + '%';
+  if (tpBox) {
+    if (tpPct >= 3) {
+      tpBox.classList.add('tp-triggered');
+      tpBox.style.borderColor = 'var(--green)';
+    } else {
+      tpBox.classList.remove('tp-triggered');
+      tpBox.style.borderColor = '';
+    }
+  }
+
+  // P&L subtitle
+  const pnlSub = document.getElementById('pnlSub');
+  if (pnlSub) {
+    const simPriceStr = simPrice > 0 ? '$' + (simPrice < 0.01 ? simPrice.toFixed(8) : simPrice.toFixed(2)) : '--';
+    const avgStr = avgPrice > 0 ? '$' + (avgPrice < 0.01 ? avgPrice.toFixed(8) : avgPrice.toFixed(2)) : '--';
+    pnlSub.textContent = `持倉 ${btcAmount > 0 ? btcAmount.toFixed(6) : '0'} BTC · 均價 ${avgStr} · 模擬價 ${simPriceStr} · 現金 $${cash.toFixed(2)}`;
+  }
+}
+
+function updateUI() {
+  if (!state) return;
+  const latest = state.latest || {};
+  const meta = state.meta || {};
+  const neural = latest.neural || {};
+
+  // Header
+  document.getElementById('stepNum').textContent = latest.tick || meta.tick || 0;
+  const equity = parseFloat(latest.equity_usdc || meta.anchor || 0);
+  document.getElementById('netValue').textContent = '$' + equity.toFixed(4);
+  const pos = meta.positions || {};
+  document.getElementById('computeStatus').textContent =
+    neural.compute_seconds ? `模擬耗時 ${neural.compute_seconds.toFixed(1)} 秒` : '';
+
+  // Status badges
+  const statusBadge = document.getElementById('statusBadge');
+  if (meta.halted) {
+    statusBadge.textContent = '執行中' + meta.halted;
+    statusBadge.className = 'badge badge-paused';
+  } else {
+    statusBadge.textContent = '執行中';
+    statusBadge.className = 'badge badge-live';
+  }
+  document.getElementById('modeBadge').textContent = meta.mode === 'live' ? '真實交易' : '模擬 盤中';
+
+  // Account row + real-time P&L
+  document.getElementById('cash').textContent = '$' + (meta.cash ? parseFloat(meta.cash).toFixed(2) : '--');
+  const initial = parseFloat(meta.initial_cash || 1000);
+  document.getElementById('initialCash').textContent = '$' + initial.toFixed(0);
+  document.getElementById('totalSpikes').textContent = (neural.total_spikes || 0).toLocaleString();
+  document.getElementById('brainMs').textContent = (neural.brain_ms || 0).toFixed(0) + 'ms';
+  updatePnL(meta, equity, initial);
+
+  // Decision
+  const side = neural.side || 'HOLD';
+  const decEl = document.getElementById('decision');
+  decEl.textContent = side === 'BUY' ? '買 BUY' : side === 'SELL' ? '賣 SELL' : '持有 HOLD';
+  decEl.className = 'decision-big decision-' + side;
+
+  // Direction based on CZSC bull/bear ratio
+  const posDir = document.getElementById('positionDir');
+  if (posDir) {
+    const czsc = latest.czsc || {};
+    const bull = parseFloat(czsc.bullish_score || 50);
+    const bear = parseFloat(czsc.bearish_score || 50);
+    if (bull > bear) {
+      posDir.textContent = '做多 ' + bull.toFixed(0) + '/' + bear.toFixed(0);
+      posDir.style.color = 'var(--green)';
+      posDir.style.textShadow = '0 0 12px rgba(38,222,129,0.5)';
+    } else if (bear > bull) {
+      posDir.textContent = '做空 ' + bull.toFixed(0) + '/' + bear.toFixed(0);
+      posDir.style.color = 'var(--red)';
+      posDir.style.textShadow = '0 0 12px rgba(252,92,101,0.5)';
+    } else {
+      posDir.textContent = '';
+      posDir.style.textShadow = 'none';
+    }
+  }
+
+  const exec = latest.execution || {};
+  document.getElementById('execStatus').innerHTML =
+    `執行: <b>${exec.status || '--'}</b>` + (exec.reason ? ` (${exec.reason})` : '');
+
+  const leftHz = neural.left_hz || 0;
+  const rightHz = neural.right_hz || 0;
+  const diff = rightHz - leftHz;
+  const maxHz = Math.max(10, leftHz, rightHz, Math.abs(diff));
+  document.getElementById('leftHz').textContent = leftHz.toFixed(1) + ' Hz';
+  document.getElementById('rightHz').textContent = rightHz.toFixed(1) + ' Hz';
+  document.getElementById('diffHz').textContent = (diff >= 0 ? '+' : '') + diff.toFixed(1) + ' Hz';
+    const gsEl = document.getElementById('gateSpikes'); if (gsEl) gsEl.textContent = (neural.gate_spikes || 0) + ' spikes';
+  const hz432El = document.getElementById('hz432Status');
+  const hz432Bar = document.getElementById('hz432Bar');
+  if (hz432El) {
+    hz432El.textContent = neural.hz432 ? 'ON' : 'OFF';
+    hz432El.style.color = neural.hz432 ? 'var(--green)' : 'var(--dim)';
+  }
+  if (hz432Bar) hz432Bar.style.width = neural.hz432 ? '100%' : '0%';
+  const kcBar = document.getElementById('kcBar');
+  if (kcBar) kcBar.style.width = Math.min(100, ((neural.KC_spikes || 0) / 30000) * 100) + '%';
+  const kcEl = document.getElementById('kcSpikes');
+  if (kcEl) kcEl.textContent = (neural.KC_spikes || 0).toLocaleString();
+  document.getElementById('leftBar').style.width = (leftHz / maxHz * 100) + '%';
+  document.getElementById('rightBar').style.width = (rightHz / maxHz * 100) + '%';
+  document.getElementById('diffBar').style.width = (Math.abs(diff) / maxHz * 100) + '%';
+  const gbEl = document.getElementById('gateBar'); if (gbEl) gbEl.style.width = Math.min(100, (neural.gate_spikes || 0) * 20) + '%';
+
+  // Flow metrics - real data for each step
+  const lastK = klines.length ? klines[klines.length-1] : null;
+    document.getElementById('m1').textContent = klines.length + ' 根 · $' + (lastK ? lastK.c.toFixed(0) : '--');
+  // RSI indicator from latest observation
+  const rsiEl = document.getElementById('rsiInfo');
+  if (rsiEl) {
+    const ev = state.events && state.events.length ? state.events[state.events.length-1] : {};
+    const rsi = ev.rsi || (ev.observation && ev.observation.rsi) || latest.rsi || (latest.observation && latest.observation.rsi);
+    if (rsi !== undefined && rsi !== null && !isNaN(rsi)) {
+      let rsiColor = 'var(--cyan)';
+      let rsiTag = '';
+      if (rsi >= 80) { rsiColor = 'var(--red)'; rsiTag = ' 超買'; }
+      else if (rsi <= 20) { rsiColor = 'var(--green)'; rsiTag = ' 超賣'; }
+      rsiEl.innerHTML = `RSI <span style="color:${rsiColor};font-weight:700">${rsi.toFixed(1)}</span>${rsiTag} · 80賣/20買`;
+    }
+  }
+  // CZSC 缠论 signals
+  const czscEl = document.getElementById('czscInfo');
+  if (czscEl) {
+    const ev2 = state.events && state.events.length ? state.events[state.events.length-1] : {};
+    const czsc = ev2.czsc || (ev2.observation && ev2.observation.czsc) || latest.czsc || (latest.observation && latest.observation.czsc);
+    if (czsc && czsc.signal) {
+      const trendIcon = czsc.last_bi_direction === 'up' ? '▲' : czsc.last_bi_direction === 'down' ? '▼' : '◆';
+      const trendColor = czsc.last_bi_direction === 'up' ? 'var(--green)' : czsc.last_bi_direction === 'down' ? 'var(--red)' : 'var(--yellow)';
+      czscEl.innerHTML = `纏論: <span style="color:${trendColor}">${trendIcon}</span> ${czsc.signal} · 筆${czsc.bi_count} 中樞${czsc.zs_count} 分型${czsc.fx_count}`;
+    }
+  }
+  document.getElementById('m2').textContent = (brain3dData ? brain3dData.retina_indices.length : 3335) + ' 感光細胞';
+  document.getElementById('m3').textContent = (neural.total_spikes||0).toLocaleString() + ' spikes · ' + (neural.brain_ms||0).toFixed(0) + 'ms';
+  const side4 = neural.side || 'HOLD';
+  const m4el = document.getElementById('m4');
+  m4el.textContent = side4 === 'BUY' ? '買 BUY' : side4 === 'SELL' ? '賣 SELL' : '持有 HOLD';
+  m4el.style.color = side4 === 'BUY' ? 'var(--green)' : side4 === 'SELL' ? 'var(--red)' : 'var(--yellow)';
+  // Step 4 description: show actual neural decoding result from step 3
+  const m4desc = document.getElementById('m4desc');
+  if (m4desc) {
+    const lHz = (neural.left_hz || 0).toFixed(1);
+    const rHz = (neural.right_hz || 0).toFixed(1);
+    const diff = ((neural.right_hz || 0) - (neural.left_hz || 0)).toFixed(1);
+    const gate = neural.gate_spikes || 0;
+    const note = neural.decision_note || '';
+    m4desc.innerHTML = `左${lHz}Hz 右${rHz}Hz 差${diff}Hz · 閘門${gate}<br><span style="color:var(--cyan);font-size:10px;">${note}</span>`;
+  }
+  const exec5 = latest.execution || {};
+    document.getElementById('m5').textContent = exec5.status || '等待';
+  const stim6 = neural.stimulus || 'none';
+  const m6el = document.getElementById('m6');
+  if (stim6 === 'reward') { m6el.textContent = 'PAM11 獎勵 ' + (neural.reward_spikes||0); m6el.style.color = 'var(--green)'; }
+    else if (stim6 === 'aversive') { m6el.textContent = 'PPL101 厭惡 ' + (neural.aversive_spikes||0); m6el.style.color = 'var(--red)'; }
+    else { m6el.textContent = '無刺激'; m6el.style.color = 'var(--dim)'; }
+  // Step 6 description: show real-time cooldown countdown based on last event wall_time
+  const m6desc = document.getElementById('m6desc');
+  if (m6desc) {
+    const cdTotal = latest.cooldown_remaining || 40;
+    const lastTick = latest.wall_time ? latest.wall_time * 1000 : 0;
+    const elapsed = lastTick ? (Date.now() - lastTick) / 1000 : 0;
+    const cdRemain = Math.max(0, cdTotal - elapsed);
+    if (cdRemain > 0) {
+      m6desc.innerHTML = `<span style="color:var(--yellow);font-weight:bold;font-size:14px;">冷卻倒數 ${cdRemain.toFixed(0)}秒</span><br>盈利刺激 PAM11 獎勵，虧損刺激 PPL101 厭惡`;
+    } else {
+      m6desc.innerHTML = '盈利刺激 PAM11 獎勵多巴胺，虧損刺激 PPL101 厭惡，調整 KC→MBON 突觸';
+    }
+  }
+
+  // Flow highlight - active step based on pipeline phase
+  if (state.latest && state.latest.wall_time) { const bms = state.latest.neural ? state.latest.neural.brain_ms : 0; onTickReceived(state.latest.wall_time, bms); }
+  document.querySelectorAll('.flow-card').forEach(c => c.classList.remove('active'));
+  let activeStep = 1;
+  if (neural.total_spikes > 0) activeStep = 3;
+  if (neural.side) activeStep = 4;
+  if (exec5.status) activeStep = 5;
+  if (stim6 !== 'none') activeStep = 6;
+  const activeCard = document.querySelector(`.flow-card[data-step="${activeStep}"]`);
+  if (activeCard) activeCard.classList.add('active');
+
+  // Event log
+  renderEvents(state.events || []);
+
+  // Dopamine stats (merged into neural monitor)
+  const stim = neural.stimulus || 'none';
+  const rewardSpikes = neural.reward_spikes || 0;
+  const aversiveSpikes = neural.aversive_spikes || 0;
+  const stimMs = neural.stimulus_ms || 0;
+  const pamEl = document.getElementById('pam11Spikes');
+  const pplEl = document.getElementById('ppl101Spikes');
+  const stimEl = document.getElementById('stimStatus');
+  if (pamEl) pamEl.textContent = rewardSpikes;
+  if (pplEl) pplEl.textContent = aversiveSpikes;
+  if (stimEl) {
+    let stimLabel = '無刺激', stimColor = 'var(--dim)';
+    if (stim === 'reward') { stimLabel = '🎁 獎勵中'; stimColor = 'var(--green)'; }
+    else if (stim === 'aversive') { stimLabel = '⚠️ 厭惡中'; stimColor = 'var(--red)'; }
+    stimEl.textContent = stimLabel + (stimMs > 0 ? ' ' + stimMs + 'ms' : '');
+    stimEl.style.color = stimColor;
+  }
+}
+
+// ============ EVENT LOG ============
+function toUTC8(ts) {
+  if (!ts) return '--';
+  const d = new Date(ts * 1000 + 8 * 3600 * 1000);
+  const h = d.getUTCHours().toString().padStart(2,'0');
+  const m = d.getUTCMinutes().toString().padStart(2,'0');
+  const s = d.getUTCSeconds().toString().padStart(2,'0');
+  return `${h}:${m}:${s}`;
+}
+
+function renderEvents(events) {
+  const log = document.getElementById('eventLog');
+  if (!log) return;
+  // Only show FILLED trades (filter out VETO/HOLD)
+  const filled = events.filter(ev => ev.execution && ev.execution.status === 'FILLED');
+  document.getElementById('eventCount').textContent = filled.length + ' 筆成交';
+  // Play sound when new trade occurs
+  if (filled.length > lastTradeCount && lastTradeCount > 0) {
+    try {
+      const audio = document.getElementById('tradeSound');
+      if (audio) { audio.currentTime = 0; audio.play().catch(() => {}); }
+    } catch(e) {}
+  }
+  lastTradeCount = filled.length;
+  if (!filled.length) {
+    log.innerHTML = '<div style="padding:20px;text-align:center;color:var(--dim)">尚無成交記錄，等待果蠅神經元決策…</div>';
+    return;
+  }
+
+  // Calculate actual realized P&L by matching buys and sells chronologically
+  const sorted = filled.slice().sort((a, b) => (a.wall_time || 0) - (b.wall_time || 0));
+  let posQty = 0, posCost = 0; // avg cost basis
+  const realizedMap = {};
+  sorted.forEach(ev => {
+    const ex = ev.execution || {};
+    const base = parseFloat(ex.base) || 0;
+    const quoteVal = parseFloat(ex.quote) || 0;
+    const price = base > 0 ? quoteVal / base : 0;
+    const side = ev.neural ? ev.neural.side : (ev.side || '');
+    if (side === 'BUY' && base > 0) {
+      const newQty = posQty + base;
+      posCost = newQty > 0 ? (posCost * posQty + price * base) / newQty : 0;
+      posQty = newQty;
+      realizedMap[ev.tick] = null; // buy has no realized P&L
+    } else if (side === 'SELL' && base > 0) {
+      const sellQty = Math.min(base, posQty);
+      const realized = (price - posCost) * sellQty;
+      realizedMap[ev.tick] = realized;
+      posQty = Math.max(0, posQty - base);
+      if (posQty === 0) posCost = 0;
+    } else {
+      realizedMap[ev.tick] = null;
+    }
+  });
+
+  const gridCols = '40px 80px 55px 70px 85px 80px 1fr';
+  const rows = filled.slice().reverse().map(ev => {
+    const tick = ev.tick != null ? ev.tick : '--';
+    const time = toUTC8(ev.wall_time);
+    const side = ev.neural ? ev.neural.side : (ev.side || '--');
+    const reason = ev.neural ? (ev.neural.decision_note || '神經決策') : '神經決策';
+    const sideColor = side === 'BUY' ? 'var(--green)' : side === 'SELL' ? 'var(--red)' : 'var(--yellow)';
+    // Use actual realized P&L instead of pnl_delta_usdc
+    const realized = realizedMap[ev.tick];
+    let pnlText, pnlColor;
+    if (realized == null) {
+      pnlText = '--';
+      pnlColor = 'var(--dim)';
+    } else {
+      pnlText = (realized >= 0 ? '+' : '') + realized.toFixed(4);
+      pnlColor = realized >= 0 ? 'var(--green)' : 'var(--red)';
+    }
+    // Execution data
+    const ex = ev.execution || {};
+    const txAmount = ex.quote ? '$' + parseFloat(ex.quote).toFixed(2) : '--';
+    let fillPrice = '--';
+    if (ex.base && ex.quote) {
+      const base = parseFloat(ex.base), quoteVal = parseFloat(ex.quote);
+      if (base > 0) fillPrice = '$' + (quoteVal / base).toFixed(2);
+    }
+    return `<div style="display:grid;grid-template-columns:${gridCols};gap:8px;padding:5px 12px;border-bottom:1px solid rgba(255,255,255,0.04);align-items:center;">
+      <span style="color:var(--dim)">#${tick}</span>
+      <span style="color:var(--cyan);font-family:'JetBrains Mono',monospace">${time}</span>
+      <span style="color:${sideColor};font-weight:700">${side}</span>
+      <span style="color:var(--yellow);font-family:'JetBrains Mono',monospace">${fillPrice}</span>
+      <span style="color:var(--text);font-weight:600">${txAmount}</span>
+      <span style="color:${pnlColor}">${pnlText}</span>
+      <span style="color:var(--dim);font-size:10px;font-weight:bold;">${reason}</span>
+    </div>`;
+  }).join('');
+  log.innerHTML = `<div style="display:grid;grid-template-columns:${gridCols};gap:8px;padding:6px 12px;background:var(--panel2);border-bottom:1px solid var(--border);color:var(--dim);font-size:10px;position:sticky;top:0;z-index:1;">
+      <span>編號</span><span>時間 UTC+8</span><span>方向</span><span>價格</span><span>交易金額</span><span>盈虧</span><span>理由</span>
+  </div>` + rows;
+}
+
+// ============ FOCUS PANEL ============
+function focusPanel(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  el.style.transition = 'box-shadow 0.3s';
+  el.style.boxShadow = '0 0 0 2px var(--cyan), 0 0 20px rgba(77,208,225,0.4)';
+  setTimeout(() => { el.style.boxShadow = ''; }, 1500);
+}
+
+// ============ FLY WALKING ANIMATION (phase-based, matches real pipeline) ============
+let walkStep = 1;
+let walkTimer = null;
+let lastTickTime = 0;
+let tickDuration = 30000; // estimated ms per tick
+let tickStartTime = 0;
+let currentBrainMs = 2000; // actual neural simulation time from data
+
+// Phase weights: how much of each tick each stage takes (must sum to 1.0)
+// Step 3 (neural simulation) gets the most time - that's where brain cells actually fire
+const PHASE_WEIGHTS = [0.05, 0.05, 0.55, 0.08, 0.12, 0.15];
+const PHASE_LABELS = ['數據擷取', '視覺編碼', '神經運算中', '決策解碼', '風控執行', '多巴胺學習'];
+
+function setFlyAtStep(step) {
+  document.querySelectorAll('.flow-card').forEach(c => {
+    c.classList.remove('walking');
+    const oldFly = c.querySelector('.fly-indicator');
+    if (oldFly) oldFly.remove();
+  });
+  const card = document.querySelector(`.flow-card[data-step="${step}"]`);
+  if (card) {
+    card.classList.add('walking');
+    const fly = document.createElement('span');
+    fly.className = 'fly-indicator';
+    fly.textContent = '\u{1FAB0}';
+    card.appendChild(fly);
+  }
+}
+
+function getPhaseAtTime(elapsed) {
+  // Determine which phase we're in based on elapsed time and phase weights
+  let cumulative = 0;
+  for (let i = 0; i < 6; i++) {
+    cumulative += PHASE_WEIGHTS[i] * tickDuration;
+    if (elapsed < cumulative) return i + 1;
+  }
+  return 6;
+}
+
+function startFlyWalking() {
+  if (walkTimer) clearInterval(walkTimer);
+  tickStartTime = Date.now();
+  walkStep = 1;
+  setFlyAtStep(1);
+  // Update fly position every 500ms based on actual elapsed time in tick
+  walkTimer = setInterval(() => {
+    const elapsed = Date.now() - tickStartTime;
+    const phase = getPhaseAtTime(elapsed);
+    if (phase !== walkStep) {
+      walkStep = phase;
+      setFlyAtStep(walkStep);
+    }
+    // If tick is taking longer than expected, loop back to step 3 (still thinking)
+    if (elapsed > tickDuration) {
+      tickStartTime = Date.now() - tickDuration * (PHASE_WEIGHTS[0] + PHASE_WEIGHTS[1]);
+    }
+  }, 500);
+}
+
+// Called when new tick data arrives: sync animation to real processing
+function onTickReceived(wallTime, brainMs) {
+  if (wallTime === lastTickTime) return;
+  if (lastTickTime > 0) {
+    const actualDuration = (wallTime - lastTickTime) * 1000;
+    if (actualDuration > 3000 && actualDuration < 180000) {
+      tickDuration = tickDuration * 0.7 + actualDuration * 0.3;
+    }
+  }
+  lastTickTime = wallTime;
+  if (brainMs && brainMs > 0) currentBrainMs = brainMs;
+  // Restart walking animation - fly starts at step 1 for new tick
+  startFlyWalking();
+}
+
+// ============ CHAN THEORY LEARNING ============
+function updateChanLearning() {
+  if (typeof state === 'undefined') return;
+  // Try state.latest first, then fall back to last event
+  let cl = null;
+  if (state.latest && state.latest.chan_learning) {
+    cl = state.latest.chan_learning;
+  } else if (state.events && state.events.length > 0 && state.events[state.events.length-1].chan_learning) {
+    cl = state.events[state.events.length-1].chan_learning;
+  }
+  // Advanced learning update (before early return)
+  try {
+    const adv = state.latest ? state.latest.advanced_learning : null;
+    if (adv) {
+      const kEl = document.getElementById('advKnowledge');
+      const rEl = document.getElementById('advReviews');
+      const lEl = document.getElementById('advLessons');
+      if (kEl && adv.knowledge) {
+        const k = adv.knowledge;
+        const domains = k.domains || {};
+        let domainStr = Object.entries(domains).map(function(e) { return e[0] + e[1].toFixed(0) + '%'; }).join(' ');
+        kEl.textContent = '知識 ' + (k.overall || 0).toFixed(1) + '% · ' + domainStr + ' · 精通' + (k.mastered || 0) + '/' + (k.total_concepts || 0);
+      }
+      if (rEl) {
+        const best = (adv.best_strategies || []).slice(0, 2).map(function(s) { return s[0] + s[1].toFixed(0) + '%'; }).join(' ');
+        rEl.textContent = '回顧' + (adv.trade_reviews || 0) + '筆 · 最佳' + best;
+      }
+      if (lEl && adv.lessons && adv.lessons.length) {
+        lEl.textContent = '💡 ' + adv.lessons[0];
+      }
+    }
+  } catch(e) { console.warn('advanced learning error', e); }
+
+  if (!cl) return;
+
+  const avgLevel = parseFloat(cl.avg_level) || 0;
+  const studyMin = parseFloat(cl.total_study_time) / 60 || 0;
+  const elAvg = document.getElementById('chanAvgLevel');
+  if (elAvg) elAvg.textContent = avgLevel.toFixed(1) + '%';
+  const elBar = document.getElementById('chanAvgBar');
+  if (elBar) elBar.style.width = Math.min(100, avgLevel) + '%';
+  const elMastered = document.getElementById('chanMastered');
+  if (elMastered) elMastered.textContent = cl.mastered || 0;
+  const elLearning = document.getElementById('chanLearning');
+  if (elLearning) elLearning.textContent = cl.learning || 0;
+  const elBeginner = document.getElementById('chanBeginner');
+  if (elBeginner) elBeginner.textContent = cl.beginner || 0;
+  const elStudyTime = document.getElementById('chanStudyTime');
+  if (elStudyTime) elStudyTime.textContent = studyMin.toFixed(1);
+
+  const statusEl = document.getElementById('chanStudyStatus');
+  if (statusEl) {
+    if (cl.is_studying && cl.current_concept) {
+      statusEl.textContent = '研讀中: ' + cl.current_concept;
+      statusEl.style.color = 'var(--green)';
+    } else {
+      statusEl.textContent = '冷卻中待命';
+      statusEl.style.color = 'var(--dim)';
+    }
+  }
+
+  // Calculate win rate from trade history
+  try {
+    const allEvts = state.events || [];
+    const sells = allEvts.filter(ev => ev.neural && ev.neural.side === 'SELL' && ev.execution && ev.execution.status === 'FILLED');
+    let wins = 0, total = sells.length;
+    sells.forEach(ev => {
+      const pnl = parseFloat(ev.pnl || ev.realized_pnl || 0);
+      if (pnl > 0) wins++;
+    });
+    const wrEl = document.getElementById('tradeWinRate');
+    if (wrEl) {
+      if (total > 0) {
+        const wr = (wins / total * 100);
+        wrEl.textContent = wr.toFixed(0) + '%';
+        wrEl.style.color = wr >= 50 ? 'var(--green)' : 'var(--red)';
+      } else {
+        wrEl.textContent = '--%';
+      }
+    }
+  } catch(e) {}
+
+  // Update practical skills (simplified)
+  if (state.latest && state.latest.chan_practical) {
+    const cp = state.latest.chan_practical;
+    const avgEl = document.getElementById('practicalAvg');
+    if (avgEl) avgEl.textContent = (cp.practical_avg||0).toFixed(0) + '%';
+  }
+
+  // Update trading bias from learning
+  if (state.latest && state.latest.chan_bias) {
+    const cb = state.latest.chan_bias;
+    const buyEl = document.getElementById('buyConf');
+    const sellEl = document.getElementById('sellConf');
+    const pivotEl = document.getElementById('pivotAware');
+    if (buyEl) buyEl.textContent = (parseFloat(cb.buy_confidence)||0).toFixed(0) + '%';
+    if (sellEl) sellEl.textContent = (parseFloat(cb.sell_confidence)||0).toFixed(0) + '%';
+    if (pivotEl) pivotEl.textContent = (parseFloat(cb.pivot_awareness)||0).toFixed(0) + '%';
+  }
+
+  const container = document.getElementById('chanConcepts');
+  if (container && cl.concepts) {
+    container.innerHTML = cl.concepts.map(function(c) {
+      const lvl = parseFloat(c.level) || 0;
+      const color = lvl >= 80 ? 'var(--green)' : lvl >= 30 ? 'var(--yellow)' : 'var(--red)';
+      return '<div style="background:rgba(255,255,255,0.03);border-radius:4px;padding:5px 7px;">' +
+        '<div style="display:flex;justify-content:space-between;font-size:10px;">' +
+        '<span style="color:var(--text);">' + c.name + '</span>' +
+        '<span style="color:' + color + ';font-family:JetBrains Mono,monospace;">' + lvl.toFixed(0) + '%</span>' +
+        '</div>' +
+        '<div style="background:rgba(255,255,255,0.05);border-radius:2px;height:3px;margin-top:3px;overflow:hidden;">' +
+        '<div style="height:100%;width:' + Math.min(100, lvl) + '%;background:' + color + ';"></div>' +
+        '</div></div>';
+    }).join('');
+  }
+
+}
+
+// ============ WATCHDOG STATS ============
+function updateWatchdog() {
+  if (typeof state !== 'undefined' && state.watchdog) {
+    const el = document.getElementById('watchdogCount');
+    if (el) el.textContent = state.watchdog.restart_count || 0;
+  }
+}
+
+// ============ SIMULATION TIMER ============
+let simStartTime = Date.now();
+setInterval(() => {
+  const elapsed = Math.floor((Date.now() - simStartTime) / 1000);
+  const h = String(Math.floor(elapsed / 3600)).padStart(2, '0');
+  const m = String(Math.floor((elapsed % 3600) / 60)).padStart(2, '0');
+  const s = String(elapsed % 60).padStart(2, '0');
+  const el = document.getElementById('simTimer');
+  if (el) el.textContent = h + ':' + m + ':' + s;
+}, 1000);
+
+// ============ BRAIN TOGGLE ============
+let brainCollapsed = false;
+function toggleBrain() {
+  const p = document.getElementById('brainPanel');
+  const a = document.getElementById('brainArrow');
+  brainCollapsed = !brainCollapsed;
+  p.classList.toggle('collapsed', brainCollapsed);
+  a.textContent = brainCollapsed ? '▶' : '▼';
+  const bl = document.getElementById('brainLoading');
+  if (bl && brainCollapsed) bl.style.display = 'none';
+  // Retry fetch if expanding and no data
+  if (!brainCollapsed && !brain3dData) {
+    if (bl) bl.style.display = 'flex';
+    const bi = document.getElementById('brainInfo');
+    if (bi) bi.textContent = '載入中…';
+    fetchBrain3d();
+  }
+  // Resize kline after toggle
+  setTimeout(() => { if (typeof drawKlines === 'function') drawKlines(); }, 300);
+}
+// Auto-collapse brain if no data after 10s
+setTimeout(() => {
+  if (!brain3dData) {
+    toggleBrain();
+    const info = document.getElementById('brainInfo');
+    if (info) info.textContent = '';
+  }
+}, 25000);
+
+// ============ CLOCK ============
+function updateClock() {
+  const now = new Date();
+  const h = now.getHours().toString().padStart(2,'0');
+  const m = now.getMinutes().toString().padStart(2,'0');
+  const s = now.getSeconds().toString().padStart(2,'0');
+  const el = document.getElementById('clock');
+  if (el) el.textContent = `${h}:${m}:${s}`;
+}
+
+// ============ INIT ============
+try { initBrain(); } catch(e) { console.error('initBrain error', e); }
+try { animateBrain(); } catch(e) { console.error('animateBrain error', e); }
+try { fetchBrain3d(); } catch(e) { console.error('fetchBrain3d error', e); }
+try { fetchState(); } catch(e) { console.error('fetchState error', e); }
+
+// Chart init with retry (in case CDN slow)
+let chartInitAttempts = 0;
+function tryInitChart() {
+  try {
+    if (typeof LightweightCharts === 'undefined') {
+      chartInitAttempts++;
+      if (chartInitAttempts < 10) setTimeout(tryInitChart, 500);
+      return;
+    }
+    loadTradingView(currentTimeframe);
+    fetchKlines();
+  } catch(e) { console.error('chart init error', e); }
+}
+tryInitChart();
+
+try { fetchTokenInfo(); } catch(e) {}
+try { fetch1mPrice(); } catch(e) {}
+try { updateClock(); } catch(e) {}
+setInterval(() => { try { fetchState(); } catch(e) {} }, 2000);
+setInterval(() => { try { fetchKlines(); } catch(e) {} }, 5000);
+setInterval(() => { try { fetch1mPrice(); } catch(e) {} }, 3000);
+setInterval(() => { try { fetchTokenInfo(); } catch(e) {} }, 10000);
+setInterval(() => { try { fetchBrain3d(); } catch(e) {} }, 30000);
+setInterval(() => { try { drawEyeChart(); } catch(e) {} }, 200);
+window.addEventListener('resize', () => {
+  try {
+    if (tvChart) {
+      const el = document.getElementById('tvChartContainer');
+      if (el) tvChart.applyOptions({ width: el.clientWidth, height: el.clientHeight });
+    }
+  } catch(e) {}
+});
+
+// === Depth Chart ===
+let depthData = { bids: [], asks: [] };
+
+async function fetchDepth() {
+  try {
+    const res = await fetch('/api/depth');
+    const data = await res.json();
+    if (data.bids && data.bids.length) {
+      depthData = data;
+      renderDepth();
+      document.getElementById('depthStatus').textContent = '即時更新';
+    }
+  } catch(e) {
+    document.getElementById('depthStatus').textContent = '離線';
+  }
+}
+
+function renderDepth() {
+  const asksEl = document.getElementById('depthAsks');
+  const bidsEl = document.getElementById('depthBids');
+  if (!asksEl || !bidsEl) return;
+  const asks = depthData.asks.slice(0, 10).reverse(); // show lowest asks at bottom near spread
+  const bids = depthData.bids.slice(0, 10);
+  const maxQty = Math.max(
+    ...asks.map(a => a[1]),
+    ...bids.map(b => b[1]),
+    0.001
+  );
+
+  // Current price = midpoint of best bid/ask
+  const bestBid = bids.length ? bids[0][0] : 0;
+  const bestAsk = asks.length ? asks[asks.length - 1][0] : 0;
+  const midPrice = (bestBid + bestAsk) / 2;
+  const spread = bestAsk - bestBid;
+  const spreadPct = midPrice ? (spread / midPrice * 100) : 0;
+
+  document.getElementById('depthPrice').textContent = '$' + midPrice.toFixed(2);
+  document.getElementById('depthSpread').textContent =
+    '價差 $' + spread.toFixed(2) + ' (' + spreadPct.toFixed(3) + '%) · 買一 $' + bestBid.toFixed(2) + ' / 賣一 $' + bestAsk.toFixed(2);
+
+  // Asks (red, top)
+  asksEl.innerHTML = asks.map(a => {
+    const pct = (a[1] / maxQty * 100).toFixed(0);
+    return '<div class="depth-row depth-ask">' +
+      '<div class="depth-bar" style="width:' + pct + '%;"></div>' +
+      '<span class="depth-price">' + a[0].toFixed(2) + '</span>' +
+      '<span class="depth-qty">' + a[1].toFixed(6) + ' BTC</span></div>';
+  }).join('');
+
+  // Bids (cyan, bottom)
+  bidsEl.innerHTML = bids.map(b => {
+    const pct = (b[1] / maxQty * 100).toFixed(0);
+    return '<div class="depth-row depth-bid">' +
+      '<div class="depth-bar" style="width:' + pct + '%;"></div>' +
+      '<span class="depth-price">' + b[0].toFixed(2) + '</span>' +
+      '<span class="depth-qty">' + b[1].toFixed(6) + ' BTC</span></div>';
+  }).join('');
+
+  // Buy/Sell ratio
+  const totalBid = bids.reduce((s, b) => s + b[0] * b[1], 0);
+  const totalAsk = asks.reduce((s, a) => s + a[0] * a[1], 0);
+  const total = totalBid + totalAsk || 1;
+  const bidPct = (totalBid / total * 100);
+  const askPct = 100 - bidPct;
+  document.getElementById('depthBidPct').textContent = 'B ' + bidPct.toFixed(0) + '%';
+  document.getElementById('depthAskPct').textContent = 'S ' + askPct.toFixed(0) + '%';
+  document.getElementById('depthRatioBid').style.width = bidPct + '%';
+  document.getElementById('depthRatioAsk').style.width = askPct + '%';
+}
+
+setInterval(fetchDepth, 1500);
+fetchDepth();
+
+setInterval(updateClock, 1000);
+</script>
+  <audio id="tradeSound" src="/trade_sound.mp3" preload="auto"></audio>
+</body>
+</html>

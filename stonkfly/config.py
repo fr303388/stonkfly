@@ -25,9 +25,9 @@ def up(value, step):
 @dataclass(frozen=True)
 class Settings:
     products: tuple[str, ...] = ("BTC-USDC",)
-    capital: str = "100"
-    order_limit: str = "10"
-    loss_stop: str = "20"
+    capital: str = "10000000"
+    order_limit: str = "100000"
+    loss_stop: str = "200"
     fee_reserve: str = "0.02"
     slippage: str = "0.005"
     spread_limit: str = "0.005"
@@ -40,21 +40,21 @@ class Settings:
     pulse_current: float = 20
     reward_deadband: str = "0.01"
     decoder_threshold_hz: float = 2
-    paper_fee: str = "0.006"
+    paper_fee: str = "0"
     learning: bool = True
+    hz432: bool = False
+    hz432_current: float = 5.0
 
     def __post_init__(self):
         if (
             not self.products
             or len(set(self.products)) != len(self.products)
-            or not set(self.products) <= set(("BTC-USDC", "ETH-USDC", "SOL-USDC"))
+            or not set(self.products) <= set(("BTC-USDC", "ETH-USDC", "SOL-USDC", "PEPE-USDT", "BTC-USDT", "BNB-USDT"))
         ):
             raise ValueError("Only allowlisted USDC spot pairs")
-        if not 0 < D(self.capital) <= 100 or not 0 < D(self.order_limit) <= min(
-            D(self.capital), D(10)
-        ):
-            raise ValueError("Maximum capital $100; maximum order $10")
-        if not 0 < D(self.loss_stop) <= D(self.capital):
+        if not 0 < D(self.capital) or not 0 < D(self.order_limit) <= D(self.capital):
+            raise ValueError("Invalid capital or order limit")
+        if not 0 < D(self.loss_stop):
             raise ValueError("Invalid loss stop")
         if (
             not D(0) < D(self.fee_reserve) <= D(".05")

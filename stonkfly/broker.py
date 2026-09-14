@@ -286,3 +286,198 @@ class CoinbaseBroker:
                 self.l.mark(cid, "ACCEPTED", oid)
             if not self._settle(cid, oid, p):
                 raise UnresolvedOrder("Order still pending at Coinbase")
+
+
+# ==================== Binance Broker ====================
+
+import hashlib
+import hmac
+import json
+import urllib.parse
+import urllib.request
+
+
+class BinanceBroker:
+    """Binance Spot API execution with HMAC-signed REST calls.
+
+    Uses market orders for immediate fill. Requires API key with Spot Trading
+    (READ + TRADE) but MUST NOT have withdrawal permission.
+    Defaults to testnet; set BINANCE_TESTNET=false for real trading.
+    """
+    mode = "live"
+
+    TESTNET_BASE = "https://testnet.binance.vision"
+    MAINNET_BASE = "https://api.binance.com"
+
+    def __init__(self, settings, ledger, api_key, api_secret, base_url, symbol="BTCUSDT"):
+        self.s = settings
+        self.l = ledger
+        self.api_key = api_key
+        self.api_secret = api_secret.encode("utf-8")
+        self.base_url = base_url
+        self.symbol = symbol
+
+    @classmethod
+    def from_env(cls, settings, ledger):
+        if os.environ.get("STONKFLY_LIVE") != "I_ACCEPT_REAL_TRADES":
+            raise RuntimeError("Live opt-in missing: set STONKFLY_LIVE=I_ACCEPT_REAL_TRADES")
+        api_key = os.environ.get("BINANCE_API_KEY")
+        api_secret = os.environ.get("BINANCE_API_SECRET")
+        if not api_key or not api_secret:
+            raise RuntimeError("Set BINANCE_API_KEY and BINANCE_API_SECRET")
+        testnet = os.environ.get("BINANCE_TESTNET", "true").lower() != "false"
+        base_url = cls.TESTNET_BASE if testnet else cls.MAINNET_BASE
+        symbol = os.environ.get("BINANCE_SYMBOL", "BTCUSDT")
+        return cls(settings, ledger, api_key, api_secret, base_url, symbol)
+
+    def _sign(self, params):
+        query = urllib.parse.urlencode(params)
+        signature = hmac.new(self.api_secret, query.encode("utf-8"), hashlib.sha256).hexdigest()
+        return f"{query}&signature={signature}"
+
+    def _request(self, method, path, params=None, signed=False):
+        url = f"{self.base_url}{path}"
+        headers = {"User-Agent": "stonkfly/1.0", "X-MBX-APIKEY": self.api_key}
+        if signed:
+            if params is None:
+                params = {}
+            params["timestamp"] = int(time.time() * 1000)
+            params["recvWindow"] = 5000
+            url = f"{url}?{self._sign(params)}"
+        else:
+            if params:
+                url = f"{url}?{urllib.parse.urlencode(params)}"
+        req = urllib.request.Request(url, data=None, headers=headers, method=method)
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            body = e.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"Binance {method} {path} -> {e.code}: {body}")
+
+    def _get_account(self):
+        return self._request("GET", "/api/v3/account", signed=True)
+
+    def _get_open_orders(self):
+        return self._request("GET", "/api/v3/openOrders", {"symbol": self.symbol}, signed=True)
+
+    def accounts(self):
+        acc = self._get_account()
+        result = {}
+        for b in acc.get("balances", []):
+            free = D(b["free"])
+            locked = D(b["locked"])
+            total = free + locked
+            if total > 0:
+                result[b["asset"]] = total
+        return result
+
+    def preflight(self):
+        balances = self.accounts()
+        open_orders = self._get_open_orders()
+        if open_orders:
+            raise RuntimeError("Open orders exist on Binance; cancel them first")
+        if not self.l.get("live_initialized"):
+            if self.l.get("tick") or self.l.db.execute("SELECT COUNT(*) FROM orders").fetchone()[0]:
+                raise RuntimeError("Uninitialized live ledger already has activity")
+            usdt = balances.get("USDT", D(0))
+            if usdt <= 0:
+                raise RuntimeError("No USDT balance in Binance account")
+            if usdt > D(self.s.capital):
+                raise RuntimeError(f"Binance USDT balance (${usdt}) exceeds configured cap (${self.s.capital})")
+            with self.l.transaction():
+                for k in ["cash", "initial_cash", "anchor"]:
+                    self.l.put(k, str(usdt))
+                self.l.put("live_initialized", True)
+                self.l.put("exchange", "binance")
+                self.l.put("symbol", self.symbol)
+        self.verify_balances()
+        network = "testnet" if "testnet" in self.base_url else "mainnet"
+        return {"mode": "live", "exchange": "binance", "network": network, "symbol": self.symbol}
+
+    def verify_balances(self):
+        actual = self.accounts()
+        expected = {"USDT": self.l.cash}
+        for p, amount in self.l.positions.items():
+            base = p.split("-")[0].replace("USDT", "").replace("USDC", "")
+            expected[base] = amount
+        for currency in set(actual) | set(expected):
+            if currency not in ("USDT", "BTC", "ETH", "SOL", "BNB"):
+                continue
+            tolerance = D("0.01") if currency == "USDT" else D("0.00000001")
+            diff = abs(actual.get(currency, D(0)) - expected.get(currency, D(0)))
+            if diff > tolerance:
+                raise RuntimeError(
+                    f"Balance mismatch {currency}: actual={actual.get(currency, 0)} expected={expected.get(currency, 0)}"
+                )
+
+    def execute(self, plan, before_submit):
+        cid = plan["client_order_id"]
+        side = plan["side"]
+        base_size = D(plan["base_size"])
+        params = {
+            "symbol": self.symbol,
+            "side": side,
+            "type": "MARKET",
+            "quantity": str(base_size),
+            "newClientOrderId": cid,
+            "newOrderRespType": "FULL",
+        }
+        try:
+            self.verify_balances()
+            before_submit(plan)
+        except Exception:
+            self.l.mark(cid, "REJECTED")
+            raise
+        self.l.mark(cid, "UNKNOWN")
+        try:
+            result = self._request("POST", "/api/v3/order", params, signed=True)
+        except Exception as e:
+            raise UnresolvedOrder(f"Binance order submission unknown: {e}") from e
+        status = result.get("status", "")
+        if status in ("REJECTED", "EXPIRED"):
+            self.l.mark(cid, "REJECTED")
+            return {"status": "REJECTED", "mode": "live", "error": result.get("msg", "")}
+        oid = result.get("orderId")
+        if not oid:
+            raise UnresolvedOrder("Binance response lacks orderId")
+        self.l.mark(cid, "ACCEPTED", str(oid))
+        fills = result.get("fills", [])
+        if fills:
+            total_qty = D(0)
+            total_value = D(0)
+            total_fee = D(0)
+            for f in fills:
+                total_qty += D(f["qty"])
+                total_value += D(f["qty"]) * D(f["price"])
+                total_fee += D(f["commission"])
+            self.l.settle(cid, str(total_qty), str(total_value), str(total_fee))
+            return {"mode": "live", "status": "SETTLED", "client_order_id": cid, "order_id": oid}
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            time.sleep(1)
+            order = self._request("GET", "/api/v3/order", {"symbol": self.symbol, "orderId": oid}, signed=True)
+            if order.get("status") in TERMINAL:
+                self.l.settle(cid, order["executedQty"], str(D(order["executedQty"]) * D(order["price"])), "0")
+                return {"mode": "live", "status": "SETTLED", "client_order_id": cid}
+        raise UnresolvedOrder("Binance order not terminal after 30s")
+
+    def reconcile(self):
+        for row in self.l.pending():
+            cid = row["id"]
+            p = row["plan"]
+            oid = row["exchange_id"]
+            if row["status"] == "PREPARED":
+                self.l.mark(cid, "REJECTED")
+                continue
+            if not oid:
+                orders = self._request("GET", "/api/v3/allOrders", {"symbol": self.symbol, "limit": 50}, signed=True)
+                found = [o for o in orders if o.get("clientOrderId") == cid]
+                if len(found) != 1:
+                    raise UnresolvedOrder(f"Order {cid} not uniquely found on Binance")
+                oid = str(found[0]["orderId"])
+                self.l.mark(cid, "ACCEPTED", oid)
+            order = self._request("GET", "/api/v3/order", {"symbol": self.symbol, "orderId": int(oid)}, signed=True)
+            if order.get("status") not in TERMINAL:
+                raise UnresolvedOrder(f"Order {cid} still pending at Binance")
+            self.l.settle(cid, order["executedQty"], str(D(order["executedQty"]) * D(order["price"])), "0")
