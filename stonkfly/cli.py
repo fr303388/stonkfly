@@ -280,7 +280,7 @@ def main():
         chan_imitation_correct = 0  # 果蠅自然決策與纏論一致次數
         if getattr(a, "chan_auto", False):
             from .chan_strategy import ChanAutoStrategy
-            chan_strategy = ChanAutoStrategy(symbol="BTCUSDT", cooldown_seconds=120)
+            chan_strategy = ChanAutoStrategy(symbol="BTCUSDT", cooldown_seconds=60)
             print("[纏論自動交易] 測試版已啟用，果蠅將觀察學習纏論決策", flush=True)
         chan_learner = ChanLearner(save_path=out / "chan_knowledge.json")
         practical_learner = ChanPracticalLearner(
@@ -656,6 +656,14 @@ def main():
                 # After sell, reset grid reference to current price
                 if exec_side == "SELL":
                     grid_ref_price = current_price
+                # Sync position to chan strategy for take-profit/stop-loss
+                if chan_strategy is not None:
+                    _exec_qty = float(order.get("base", 0))
+                    _exec_price = float(order.get("quote", 0)) / _exec_qty if _exec_qty > 0 else current_price
+                    if exec_side == "BUY":
+                        chan_strategy.update_position("LONG", _exec_price)
+                    elif exec_side == "SELL":
+                        chan_strategy.update_position(None)
                 exec_qty = float(order.get("base", 0))
                 exec_price = float(order.get("quote", 0)) / exec_qty if exec_qty > 0 else current_price
                 if exec_side == "BUY" and exec_qty > 0:
