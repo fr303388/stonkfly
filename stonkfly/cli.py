@@ -276,13 +276,12 @@ def main():
         guard = Guard(settings, ledger, out / "STOP")
         strategy = StrategyState(name=getattr(a, "strategy", "none"), base_budget=10000000.0)
         chan_strategy = None
-        _chan_auto_flag = getattr(a, "chan_auto", False)
-        with open(out / "chan_debug.log", "a", encoding="utf-8") as _f:
-            _f.write(f"chan_auto flag={_chan_auto_flag}, attrs={[k for k in vars(a) if 'chan' in k]}\n")
-        if _chan_auto_flag:
+        chan_observations = 0  # 果蠅觀察纏論交易次數
+        chan_imitation_correct = 0  # 果蠅自然決策與纏論一致次數
+        if getattr(a, "chan_auto", False):
             from .chan_strategy import ChanAutoStrategy
             chan_strategy = ChanAutoStrategy(symbol="BTCUSDT", cooldown_seconds=300)
-            print("[纏論自動交易] 測試版已啟用，使用15分K線纏論指標", flush=True)
+            print("[纏論自動交易] 測試版已啟用，果蠅將觀察學習纏論決策", flush=True)
         chan_learner = ChanLearner(save_path=out / "chan_knowledge.json")
         practical_learner = ChanPracticalLearner(
             knowledge_path=out / "chan_knowledge.json",
@@ -334,6 +333,23 @@ def main():
             product = settings.products[ledger.get("tick") % len(settings.products)]
             q = quotes[product]
             equity = ledger.equity(quotes)
+            # Position info (moved early for chan strategy)
+            pos_qty = float(ledger.positions.get(product, 0))
+            current_price = float(q.bid)
+            has_position = pos_qty > 0.0001
+            # [測試版] 純纏論15分K線自動交易 + 果蠅觀察學習
+            chan_result = None
+            fly_natural_side = "HOLD"  # 果蠅自然決策（observe之後才知道，先預設）
+            if chan_strategy is not None:
+                chan_result = chan_strategy.analyze(interval="15m")
+                chan_sig = chan_result.get("signal", "HOLD")
+                chan_reason = chan_result.get("reason", "")
+                if chan_sig == "BUY" and not has_position:
+                    chan_strategy.mark_traded()
+                    chan_observations += 1
+                elif chan_sig == "SELL" and has_position:
+                    chan_strategy.mark_traded()
+                    chan_observations += 1
             kind, delta = reinforcement(
                 equity, ledger.get("anchor"), settings.reward_deadband
             )
@@ -347,6 +363,9 @@ def main():
                     take_profit_hit = True
                     kind = "reward"
                     delta = equity - D(ledger.get("anchor"))
+            # [觀察學習] 纏論交易時用reward刺激，讓果蠅學習該決策模式
+            if chan_strategy is not None and chan_result is not None and chan_result.get("signal") in ("BUY", "SELL"):
+                kind = "reward"
             macd = compute_macd(market.history[product])
             rsi = compute_rsi(market.history[product])
             rsi_latest = float(rsi[-1]) if len(rsi) and not np.isnan(rsi[-1]) else None
@@ -363,6 +382,25 @@ def main():
                 price_percentile = 50.0
             frame = market_frame(product, market.history[product], q.bid, q.ask, macd=macd, strategy=strategy.to_dict(), czsc=czsc_obs)
             neural = controller.observe(frame, kind, czsc=czsc_analysis)
+            # [觀察學習] 纏論決策覆蓋果蠅自然決策，並記錄模仿準確率
+            if chan_strategy is not None and chan_result is not None:
+                fly_natural_side = neural.get("side", "HOLD")
+                chan_sig = chan_result.get("signal", "HOLD")
+                chan_reason = chan_result.get("reason", "")
+                if chan_sig == "BUY" and not has_position:
+                    if fly_natural_side == "BUY":
+                        chan_imitation_correct += 1
+                    neural["side"] = "BUY"
+                    neural["decision_note"] = f"[纏論自動] {chan_reason} (信心{chan_result.get('confidence',0)}%)"
+                elif chan_sig == "SELL" and has_position:
+                    if fly_natural_side == "SELL":
+                        chan_imitation_correct += 1
+                    neural["side"] = "SELL"
+                    neural["decision_note"] = f"[纏論自動] {chan_reason} (信心{chan_result.get('confidence',0)}%)"
+                else:
+                    neural["side"] = "HOLD"
+                    neural["decision_note"] = f"[纏論自動] {chan_reason} (觀察{chan_observations}次 模仿率{(chan_imitation_correct/chan_observations*100) if chan_observations else 0:.0f}%)"
+            neural_side = neural.get("side", "HOLD")
             if take_profit_hit:
                 neural["side"] = "SELL"
                 neural["take_profit"] = True
@@ -381,32 +419,7 @@ def main():
                 "dea": float(macd["dea"][-1]) if len(macd["dea"]) and not np.isnan(macd["dea"][-1]) else None,
                 "hist": float(macd["hist"][-1]) if len(macd["hist"]) and not np.isnan(macd["hist"][-1]) else None,
             }
-            # Position info (for chan strategy)
-            pos_qty = float(ledger.positions.get(product, 0))
-            current_price = float(q.bid)
-            has_position = pos_qty > 0.0001
 
-            # [測試版] 純纏論15分K線自動交易
-            chan_result = None
-            with open(out / "chan_debug.log", "a", encoding="utf-8") as _f2:
-                _f2.write(f"tick={count} chan_strategy_is_not_none={chan_strategy is not None}\n")
-            if chan_strategy is not None:
-                chan_result = chan_strategy.analyze(interval="15m")
-                chan_sig = chan_result.get("signal", "HOLD")
-                chan_reason = chan_result.get("reason", "")
-                if chan_sig == "BUY" and not has_position:
-                    neural["side"] = "BUY"
-                    neural["decision_note"] = f"[纏論自動] {chan_reason} (信心{chan_result.get('confidence',0)}%)"
-                    chan_strategy.mark_traded()
-                elif chan_sig == "SELL" and has_position:
-                    neural["side"] = "SELL"
-                    neural["decision_note"] = f"[纏論自動] {chan_reason} (信心{chan_result.get('confidence',0)}%)"
-                    chan_strategy.mark_traded()
-                else:
-                    neural["side"] = "HOLD"
-                    neural["decision_note"] = f"[纏論自動] {chan_reason}"
-            # Save original neural decision before overwriting
-            neural_side = neural.get("side", "HOLD")
 
             observation = {
                 "neural": neural,
@@ -420,6 +433,8 @@ def main():
                 "czsc": czsc_analysis,
                 "price_percentile": price_percentile,
                 "chan_auto": chan_result,
+                "chan_observations": chan_observations,
+                "chan_imitation_rate": (chan_imitation_correct / chan_observations * 100) if chan_observations > 0 else 0,
             }
             # Periodically compact SQLite WAL to prevent growth
             if count > 0 and count % 100 == 0:
