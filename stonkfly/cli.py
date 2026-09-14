@@ -293,9 +293,23 @@ def main():
             started = time.monotonic()
             # Release unused memory before each tick - prevents gradual slowdown
             gc.collect()
-            # Clear numpy internal cache if it grows too large
-            if hasattr(np, 'clear_float'):
-                pass  # numpy doesn't have this, but gc.collect handles it
+            # Step-based sleep: every 25 steps, force sleep & reorganize
+            if count >= 25:
+                print(f"[睡眠] 已執行 {count} 步，強制睡眠整理大腦", file=sys.stderr, flush=True)
+                # Save brain checkpoint before sleep
+                _sleep_slot = ledger.get("tick") % 2
+                _sleep_ckpt = out / f"brain-{_sleep_slot}.npz"
+                controller.save(_sleep_ckpt)
+                try:
+                    (out / "SLEEP").write_text(json.dumps({
+                        "tick": ledger.get("tick"),
+                        "steps": count,
+                        "time": time.time(),
+                    }))
+                except Exception:
+                    pass
+                gc.collect()
+                sys.exit(42)
             stop_requested = (out / "STOP").exists()
             halted = ledger.get("halted")
             if stop_requested or halted:
@@ -339,25 +353,6 @@ def main():
                 price_percentile = 50.0
             frame = market_frame(product, market.history[product], q.bid, q.ask, macd=macd, strategy=strategy.to_dict(), czsc=czsc_obs)
             neural = controller.observe(frame, kind, czsc=czsc_analysis)
-            # Neural simulation timeout protection: if >80s, force sleep & reorganize
-            _compute_sec = float(neural.get("compute_seconds", 0))
-            if _compute_sec > 80:
-                print(f"[睡眠] 神經模擬耗時 {_compute_sec:.1f}s 超過80s，強制睡眠整理大腦", file=sys.stderr, flush=True)
-                # Save brain checkpoint before sleep
-                _sleep_slot = ledger.get("tick") % 2
-                _sleep_ckpt = out / f"brain-{_sleep_slot}.npz"
-                controller.save(_sleep_ckpt)
-                # Write sleep signal for watchdog/runner
-                try:
-                    (out / "SLEEP").write_text(json.dumps({
-                        "tick": ledger.get("tick"),
-                        "compute_seconds": _compute_sec,
-                        "time": time.time(),
-                    }))
-                except Exception:
-                    pass
-                gc.collect()
-                sys.exit(42)  # Special exit code: brain sleep/reorganize
             if take_profit_hit:
                 neural["side"] = "SELL"
                 neural["take_profit"] = True
@@ -426,12 +421,12 @@ def main():
 
             # PRIMARY: RSI oversold (<=30) + CZSC confirmation → BUY
             # Learning boost: if fly mastered buy points (>=50%), accept RSI<=35
-            rsi_buy_thresh = 35 if buy_conf >= 50 else 30
+            rsi_buy_thresh = 45 if buy_conf >= 50 else 40
             if rsi_val is not None and rsi_val <= rsi_buy_thresh and not has_position and trade_cooldown == 0:
                 czsc_ok = czsc_bull > czsc_bear or czsc_dir == "up"
                 # If learning is low (<20%), require stronger CZSC advantage
                 if buy_conf < 20:
-                    czsc_ok = czsc_bull > czsc_bear + 10
+                    czsc_ok = czsc_bull > czsc_bear + 5
                 if czsc_ok:
                     confirm_reason = "多頭壓倒" if czsc_bull > czsc_bear else ("最後一筆向上" if czsc_dir == "up" else "中樞震盪")
                     learn_tag = f"知識{overall_know:.0f}%買點{buy_conf:.0f}%"
@@ -446,12 +441,12 @@ def main():
 
             # PRIMARY: RSI overbought (>=70) + CZSC confirmation → SELL
             # Learning boost: if fly mastered sell points (>=50%), accept RSI>=65
-            rsi_sell_thresh = 65 if sell_conf >= 50 else 70
+            rsi_sell_thresh = 55 if sell_conf >= 50 else 60
             if rsi_val is not None and rsi_val >= rsi_sell_thresh and has_position and trade_cooldown == 0:
                 czsc_ok = czsc_bear > czsc_bull or czsc_dir == "down"
                 # If learning is low (<20%), require stronger CZSC advantage
                 if sell_conf < 20:
-                    czsc_ok = czsc_bear > czsc_bull + 10
+                    czsc_ok = czsc_bear > czsc_bull + 5
                 if czsc_ok:
                     confirm_reason = "空頭壓倒" if czsc_bear > czsc_bull else "最後一筆向下"
                     learn_tag = f"知識{overall_know:.0f}%賣點{sell_conf:.0f}%"
@@ -475,7 +470,7 @@ def main():
                 pside = practical_signal["signal"]
                 pconf = practical_signal["confidence"]
                 # Require minimum 30% practical confidence
-                if pconf >= 30:
+                if pconf >= 15:
                     if pside == "BUY" and not has_position:
                         neural["side"] = "BUY"
                         # Find which skill triggered
@@ -507,12 +502,10 @@ def main():
             # Higher knowledge lowers gate/difference thresholds
             if neural["side"] == "HOLD" and trade_cooldown == 0:
                 neural_diff = neural_right - neural_left
-                if overall_know < 20:
-                    neural["decision_note"] = f"纏論知識不足({overall_know:.0f}%<20%)，神經僅觀察"
-                elif neural_gate >= 3 and neural_diff >= 5 and not has_position and (rsi_val is None or rsi_val < 50):
-                    # Knowledge boost: >=60% knowledge allows gate>=2
-                    gate_ok = neural_gate >= (2 if overall_know >= 60 else 3)
-                    diff_ok = neural_diff >= (4 if overall_know >= 60 else 5)
+                # Bold mode: neural can trade at any knowledge level, lower thresholds
+                if neural_gate >= 2 and neural_diff >= 3 and not has_position and (rsi_val is None or rsi_val < 55):
+                    gate_ok = neural_gate >= 2
+                    diff_ok = neural_diff >= 3
                     if gate_ok and diff_ok:
                         learn_tag = f"知識{overall_know:.0f}%買點{buy_conf:.0f}%"
                         neural["side"] = "BUY"
@@ -523,9 +516,9 @@ def main():
                         ) + f" [神經決策 {learn_tag}]"
                     else:
                         neural["decision_note"] = f"神經觀察中 (閘門{neural_gate} 差{neural_diff:.1f}Hz 未達門檻)"
-                elif neural_gate >= 3 and neural_diff <= -5 and has_position and (rsi_val is None or rsi_val > 50):
-                    gate_ok = neural_gate >= (2 if overall_know >= 60 else 3)
-                    diff_ok = neural_diff <= (-4 if overall_know >= 60 else -5)
+                elif neural_gate >= 2 and neural_diff <= -3 and has_position and (rsi_val is None or rsi_val > 45):
+                    gate_ok = neural_gate >= 2
+                    diff_ok = neural_diff <= -3
                     if gate_ok and diff_ok:
                         learn_tag = f"知識{overall_know:.0f}%賣點{sell_conf:.0f}%"
                         neural["side"] = "SELL"
@@ -537,20 +530,20 @@ def main():
                     else:
                         neural["decision_note"] = f"神經觀察中 (閘門{neural_gate} 差{neural_diff:.1f}Hz 未達門檻)"
                 elif neural_gate < 3:
-                    neural["decision_note"] = f"神經觀察中 (閘門{neural_gate}<3 RSI{rsi_val:.0f} 知識{overall_know:.0f}%)"
+                    neural["decision_note"] = f"神經觀察中 (閘門{neural_gate}<2 RSI{rsi_val:.0f} 知識{overall_know:.0f}%)"
                 else:
                     neural["decision_note"] = f"神經觀察中 (差{neural_diff:.1f}Hz RSI{rsi_val:.0f} 知識{overall_know:.0f}%)"
 
             # VISUAL: Photoreceptor input touches bottom -> buy, touches top -> sell
             if neural["side"] == "HOLD" and trade_cooldown == 0:
-                if price_percentile <= 10 and not has_position:
+                if price_percentile <= 25 and not has_position:
                     neural["side"] = "BUY"
                     neural["decision_note"] = generate_buy_reason(
                         rsi=rsi_val, czsc=czsc_analysis, price_percentile=price_percentile,
                         neural_gate=neural_gate, neural_diff=neural_right-neural_left,
                         practical_skill="bottom_fractal", has_position=has_position
                     ) + " [視覺觸底]"
-                elif price_percentile >= 90 and has_position:
+                elif price_percentile >= 75 and has_position:
                     neural["side"] = "SELL"
                     neural["decision_note"] = generate_sell_reason(
                         rsi=rsi_val, czsc=czsc_analysis, price_percentile=price_percentile,
@@ -624,7 +617,7 @@ def main():
                 "rsi": rsi_latest,
                 "czsc": czsc_analysis,
                 "price_percentile": price_percentile,
-                "cooldown_remaining": 80.0,
+                "cooldown_remaining": 20.0,
                 "hold_remaining": hold_remaining,
                 "chan_learning": chan_learner.get_knowledge_summary(),
                 "chan_bias": chan_learner.get_trading_bias(),
@@ -655,9 +648,9 @@ def main():
             except OSError:
                 pass  # hidden window has no stdout
             count += 1
-            # Per-step cooldown: 80 seconds, fly studies theory + practical
+            # Per-step cooldown: 20 seconds, fly studies theory + practical
             if not a.steps or count < a.steps:
-                cooldown_end = time.time() + 80
+                cooldown_end = time.time() + 20
                 study_concept = chan_learner.start_study()
                 practical_learner.start_practice()
                 market_for_practice = {
