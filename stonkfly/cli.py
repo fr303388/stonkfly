@@ -305,6 +305,14 @@ def main():
         if getattr(a, "chan_auto", False):
             from .chan_strategy import ChanAutoStrategy
             chan_strategy = ChanAutoStrategy(symbol="BTCUSDT", cooldown_seconds=60)
+        # Sync strategy position with ledger on startup
+        try:
+            _pos = ledger.positions.get(product, 0)
+            if float(_pos) > 0.0001:
+                chan_strategy.update_position("LONG", float(ledger.get("anchor")) / float(_pos) if float(_pos) > 0 else None)
+                print(f"[策略] 同步持倉: {_pos} BTC", file=sys.stderr, flush=True)
+        except Exception as _e:
+            print(f"[策略] 持倉同步失敗: {_e}", file=sys.stderr, flush=True)
             print("[纏論自動交易] 測試版已啟用，果蠅將觀察學習纏論決策", flush=True)
         chan_learner = ChanLearner(save_path=out / "chan_knowledge.json")
         practical_learner = ChanPracticalLearner(
