@@ -102,16 +102,21 @@ def main():
     try:
         while True:
             if first_run:
-                # 首次執行：清除舊資料，從零開始
-                for pattern in ["ledger.sqlite", "events.jsonl", "latest.json"]:
-                    f = RUN_DIR / pattern
-                    if f.exists():
-                        for _ in range(5):
-                            try:
-                                f.unlink()
-                                break
-                            except PermissionError:
-                                time.sleep(1)
+                # 檢查是否已有交易資料，有則保留（從中斷處恢復）
+                has_existing_data = (RUN_DIR / "events.jsonl").exists() and (RUN_DIR / "events.jsonl").stat().st_size > 100
+                if has_existing_data:
+                    print("  [恢復] 偵測到既有交易資料，保留並接續執行")
+                else:
+                    # 首次執行：清除舊資料，從零開始
+                    for pattern in ["ledger.sqlite", "events.jsonl", "latest.json"]:
+                        f = RUN_DIR / pattern
+                        if f.exists():
+                            for _ in range(5):
+                                try:
+                                    f.unlink()
+                                    break
+                                except PermissionError:
+                                    time.sleep(1)
                 first_run = False
             else:
                 # 從備份還原大腦
