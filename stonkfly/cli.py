@@ -280,7 +280,7 @@ def main():
         chan_imitation_correct = 0  # 果蠅自然決策與纏論一致次數
         if getattr(a, "chan_auto", False):
             from .chan_strategy import ChanAutoStrategy
-            chan_strategy = ChanAutoStrategy(symbol="BTCUSDT", cooldown_seconds=300)
+            chan_strategy = ChanAutoStrategy(symbol="BTCUSDT", cooldown_seconds=120)
             print("[纏論自動交易] 測試版已啟用，果蠅將觀察學習纏論決策", flush=True)
         chan_learner = ChanLearner(save_path=out / "chan_knowledge.json")
         practical_learner = ChanPracticalLearner(
@@ -318,6 +318,13 @@ def main():
                 except Exception:
                     pass
                 gc.collect()
+                # Brain consolidation during sleep: prune weak synapses
+                try:
+                    if hasattr(controller, 'brain') and hasattr(controller.brain, 'consolidate'):
+                        controller.brain.consolidate(prune_threshold=0.01)
+                        print("[睡眠] 大腦記憶鞏固完成，弱化突觸已修剪", file=sys.stderr, flush=True)
+                except Exception as _e:
+                    print(f"[睡眠] 記憶鞏固跳過: {_e}", file=sys.stderr, flush=True)
                 sys.exit(42)
             stop_requested = (out / "STOP").exists()
             halted = ledger.get("halted")
@@ -382,6 +389,10 @@ def main():
                 price_percentile = 50.0
             frame = market_frame(product, market.history[product], q.bid, q.ask, macd=macd, strategy=strategy.to_dict(), czsc=czsc_obs)
             neural = controller.observe(frame, kind, czsc=czsc_analysis)
+            # Compute time guard: if neural simulation exceeds 30s, flag for optimization
+            _compute_sec = neural.get("compute_seconds", 0)
+            if _compute_sec > 30:
+                print(f"[警告] 神經模擬耗時{_compute_sec:.1f}s，建議睡眠整理", file=sys.stderr, flush=True)
             # [觀察學習] 纏論決策覆蓋果蠅自然決策，並記錄模仿準確率
             if chan_strategy is not None and chan_result is not None:
                 fly_natural_side = neural.get("side", "HOLD")
@@ -679,10 +690,13 @@ def main():
                 "advanced_learning": advanced_brain.get_status(),
                 "strategy": strategy.to_dict(),
             }
-            with (out / "events.jsonl").open("a") as f:
-                f.write(json.dumps(row, allow_nan=False) + "\n")
-                f.flush()
-                os.fsync(f.fileno())
+            # Only record actual trades (FILLED) or BUY/SELL decisions, not HOLD
+            _is_trade = order.get("status") == "FILLED" or neural["side"] in ("BUY", "SELL")
+            if _is_trade:
+                with (out / "events.jsonl").open("a") as f:
+                    f.write(json.dumps(row, allow_nan=False) + "\n")
+                    f.flush()
+                    os.fsync(f.fileno())
             Image.fromarray(frame).save(out / "latest-input.png")
             (out / "latest.json").write_text(json.dumps(row, indent=2) + "\n")
             try:
