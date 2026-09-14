@@ -188,6 +188,30 @@ def main():
     from .ledger import Ledger
 
     ledger = Ledger(out / "ledger.sqlite", settings, "live" if a.live else "paper")
+
+    # Recover tick counter from events.jsonl to avoid duplicate tick numbers after restart
+    try:
+        events_file = out / "events.jsonl"
+        if events_file.exists() and events_file.stat().st_size > 100:
+            max_tick = 0
+            with open(events_file, "r", encoding="utf-8") as _ef:
+                for _line in _ef:
+                    _line = _line.strip()
+                    if _line:
+                        try:
+                            _ev = json.loads(_line)
+                            _t = _ev.get("tick", 0)
+                            if isinstance(_t, (int, float)) and _t > max_tick:
+                                max_tick = int(_t)
+                        except json.JSONDecodeError:
+                            continue
+            current_tick = ledger.get("tick") or 0
+            if max_tick > current_tick:
+                ledger.put("tick", max_tick)
+                print(f"[恢復] tick從{current_tick}恢復到{max_tick}（從交易記錄）", file=sys.stderr, flush=True)
+    except Exception as _e:
+        print(f"[恢復] tick恢復失敗: {_e}", file=sys.stderr, flush=True)
+
     try:
         if a.live:
             if a.exchange == "binance":
