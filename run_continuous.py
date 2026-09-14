@@ -51,6 +51,7 @@ def run_batch(batch_num):
         "--fast", "--steps", str(STEPS),
         "--products", "BTC-USDT", "--exchange", "binance",
         "--neural-ms", "2000", "--hz432", "--strategy", "martingale",
+        "--chan-auto",
     ]
 
     try:

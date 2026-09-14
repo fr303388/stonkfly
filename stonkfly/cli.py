@@ -126,6 +126,8 @@ def main():
         default=0.0,
         help="Take-profit percent; when equity rises by this %% from initial capital, force SELL and reward PAM11 (0 disables)",
     )
+    run.add_argument("--chan-auto", action="store_true",
+                     help="[測試版] 純纏論15分K線自動交易模式")
     status = sub.add_parser("status")
     status.add_argument("--out", type=Path, default=Path("runs/paper"))
     a = p.parse_args()
@@ -273,6 +275,14 @@ def main():
         (out / "provenance.json").write_text(json.dumps(provenance, indent=2) + "\n")
         guard = Guard(settings, ledger, out / "STOP")
         strategy = StrategyState(name=getattr(a, "strategy", "none"), base_budget=10000000.0)
+        chan_strategy = None
+        _chan_auto_flag = getattr(a, "chan_auto", False)
+        with open(out / "chan_debug.log", "a", encoding="utf-8") as _f:
+            _f.write(f"chan_auto flag={_chan_auto_flag}, attrs={[k for k in vars(a) if 'chan' in k]}\n")
+        if _chan_auto_flag:
+            from .chan_strategy import ChanAutoStrategy
+            chan_strategy = ChanAutoStrategy(symbol="BTCUSDT", cooldown_seconds=300)
+            print("[纏論自動交易] 測試版已啟用，使用15分K線纏論指標", flush=True)
         chan_learner = ChanLearner(save_path=out / "chan_knowledge.json")
         practical_learner = ChanPracticalLearner(
             knowledge_path=out / "chan_knowledge.json",
@@ -371,6 +381,33 @@ def main():
                 "dea": float(macd["dea"][-1]) if len(macd["dea"]) and not np.isnan(macd["dea"][-1]) else None,
                 "hist": float(macd["hist"][-1]) if len(macd["hist"]) and not np.isnan(macd["hist"][-1]) else None,
             }
+            # Position info (for chan strategy)
+            pos_qty = float(ledger.positions.get(product, 0))
+            current_price = float(q.bid)
+            has_position = pos_qty > 0.0001
+
+            # [測試版] 純纏論15分K線自動交易
+            chan_result = None
+            with open(out / "chan_debug.log", "a", encoding="utf-8") as _f2:
+                _f2.write(f"tick={count} chan_strategy_is_not_none={chan_strategy is not None}\n")
+            if chan_strategy is not None:
+                chan_result = chan_strategy.analyze(interval="15m")
+                chan_sig = chan_result.get("signal", "HOLD")
+                chan_reason = chan_result.get("reason", "")
+                if chan_sig == "BUY" and not has_position:
+                    neural["side"] = "BUY"
+                    neural["decision_note"] = f"[纏論自動] {chan_reason} (信心{chan_result.get('confidence',0)}%)"
+                    chan_strategy.mark_traded()
+                elif chan_sig == "SELL" and has_position:
+                    neural["side"] = "SELL"
+                    neural["decision_note"] = f"[纏論自動] {chan_reason} (信心{chan_result.get('confidence',0)}%)"
+                    chan_strategy.mark_traded()
+                else:
+                    neural["side"] = "HOLD"
+                    neural["decision_note"] = f"[纏論自動] {chan_reason}"
+            # Save original neural decision before overwriting
+            neural_side = neural.get("side", "HOLD")
+
             observation = {
                 "neural": neural,
                 "product": product,
@@ -382,6 +419,7 @@ def main():
                 "rsi": rsi_latest,
                 "czsc": czsc_analysis,
                 "price_percentile": price_percentile,
+                "chan_auto": chan_result,
             }
             # Periodically compact SQLite WAL to prevent growth
             if count > 0 and count % 100 == 0:
@@ -389,19 +427,15 @@ def main():
                     ledger.db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
                 except Exception:
                     pass
+
             ledger.commit_tick(equity, checkpoint_info, observation)
             order = {"status": "HOLD"}
-            # Position info
-            pos_qty = float(ledger.positions.get(product, 0))
-            current_price = float(q.bid)
-            has_position = pos_qty > 0.0001
-
-            # HYBRID: RSI + CZSC indicators (primary) + Neural network (partial)
-            # Save original neural decision before overwriting
-            neural_side = neural.get("side", "HOLD")
             neural_left = neural.get("left_hz", 0)
             neural_right = neural.get("right_hz", 0)
             neural_gate = neural.get("gate_spikes", 0)
+            # 儲存纏論決策（混合邏輯可能覆蓋，稍後恢復）
+            chan_decision_side = neural.get("side", "HOLD")
+            chan_decision_note = neural.get("decision_note", "")
             neural["side"] = "HOLD"
             neural["decision_note"] = "神經觀察中"
 
@@ -561,6 +595,11 @@ def main():
             if hold_remaining > 0 and neural["side"] == "SELL":
                 neural["side"] = "HOLD"
                 neural["decision_note"] = f"最短持有中 ({hold_remaining:.0f}秒)"
+
+            # [纏論自動模式] 始終使用纏論決策（包括HOLD），完全覆蓋混合邏輯
+            if chan_strategy is not None:
+                neural["side"] = chan_decision_side
+                neural["decision_note"] = chan_decision_note
 
             # Unlimited capital mode: no cash check, fixed 0.1 BTC per buy
             if neural["side"] != "HOLD":
