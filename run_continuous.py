@@ -125,15 +125,8 @@ def main():
                     # 睡眠恢復：保留ledger（持倉、現金、權益接續）
                     print("  [睡眠恢復] 保留帳戶狀態，從睡眠前接續")
                 else:
-                    # crash 恢復：清除ledger（重新開始），但events.jsonl保留
-                    ledger = RUN_DIR / "ledger.sqlite"
-                    if ledger.exists():
-                        for _ in range(5):
-                            try:
-                                ledger.unlink()
-                                break
-                            except PermissionError:
-                                time.sleep(1)
+                    # crash 恢復：保留ledger（持倉、現金接續），避免資料遺失
+                    print("  [崩潰恢復] 保留帳戶狀態，從中斷處接續")
 
             # 清理殘留鎖檔
             lock_file = RUN_DIR / "worker.lock"

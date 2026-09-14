@@ -305,14 +305,18 @@ def main():
         if getattr(a, "chan_auto", False):
             from .chan_strategy import ChanAutoStrategy
             chan_strategy = ChanAutoStrategy(symbol="BTCUSDT", cooldown_seconds=60)
-        # Sync strategy position with ledger on startup
-        try:
-            _pos = ledger.positions.get(product, 0)
-            if float(_pos) > 0.0001:
-                chan_strategy.update_position("LONG", float(ledger.get("anchor")) / float(_pos) if float(_pos) > 0 else None)
-                print(f"[策略] 同步持倉: {_pos} BTC", file=sys.stderr, flush=True)
-        except Exception as _e:
-            print(f"[策略] 持倉同步失敗: {_e}", file=sys.stderr, flush=True)
+            # Sync strategy position with ledger on startup
+            try:
+                _product = settings.products[0]
+                _pos = float(ledger.positions.get(_product, 0))
+                if _pos > 0.0001:
+                    # Calculate avg entry price from cash spent
+                    _cash_spent = float(ledger.get("initial_cash")) - float(ledger.get("cash"))
+                    _avg_price = _cash_spent / _pos if _pos > 0 else None
+                    chan_strategy.update_position("LONG", _avg_price)
+                    print(f"[策略] 同步持倉: {_pos:.6f} BTC @ ${_avg_price:.2f}", file=sys.stderr, flush=True)
+            except Exception as _e:
+                print(f"[策略] 持倉同步失敗: {_e}", file=sys.stderr, flush=True)
             print("[纏論自動交易] 測試版已啟用，果蠅將觀察學習纏論決策", flush=True)
         chan_learner = ChanLearner(save_path=out / "chan_knowledge.json")
         practical_learner = ChanPracticalLearner(
@@ -730,8 +734,8 @@ def main():
                 "advanced_learning": advanced_brain.get_status(),
                 "strategy": strategy.to_dict(),
             }
-            # Only record actual trades (FILLED) or BUY/SELL decisions, not HOLD
-            _is_trade = order.get("status") == "FILLED" or neural["side"] in ("BUY", "SELL")
+            # Only record actual FILLED trades, not unexecuted BUY/SELL decisions
+            _is_trade = order.get("status") == "FILLED"
             if _is_trade:
                 with (out / "events.jsonl").open("a") as f:
                     f.write(json.dumps(row, allow_nan=False) + "\n")
