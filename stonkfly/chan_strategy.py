@@ -1,6 +1,6 @@
 """
 純纏論自動交易策略（優化版）
-使用15分K線的纏論結構 + RSI + 止盈止損做買賣決策
+使用15分K線的纏論結構 + RSI + 止損做買賣決策（止盈由纏論和果蠅決定）
 更積極交易，避免長時間持有不動
 """
 import time
@@ -87,15 +87,9 @@ class ChanAutoStrategy:
         bull_score = czsc.get("bullish_score", 50)
         bear_score = czsc.get("bearish_score", 50)
 
-        # === 止盈止損（優先級最高）===
+        # === 止損（優先級最高，止盈已取消，由纏論和果蠅決定賣出）===
         if self.position_side == "LONG" and self.entry_price:
             pnl_pct = (current_price - self.entry_price) / self.entry_price * 100
-            if pnl_pct >= 3.0:
-                return {
-                    "signal": "SELL", "reason": f"止盈 +{pnl_pct:.2f}% (買入${self.entry_price:.2f})",
-                    "confidence": 90, "price": current_price, "rsi": rsi,
-                    "czsc": czsc, "trend": trend, "pnl_pct": pnl_pct,
-                }
             if pnl_pct <= -3.0:
                 return {
                     "signal": "SELL", "reason": f"止損 {pnl_pct:.2f}% (買入${self.entry_price:.2f})",

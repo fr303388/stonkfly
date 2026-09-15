@@ -2174,7 +2174,10 @@ function updateUI() {
     }
   }
   document.getElementById('m2').textContent = (brain3dData ? brain3dData.retina_indices.length : 3335) + ' 感光細胞';
-  document.getElementById('m3').textContent = (neural.total_spikes||0).toLocaleString() + ' spikes · ' + (neural.brain_ms||0).toFixed(0) + 'ms';
+  const _brainMs = neural.brain_ms || 0;
+  const _tick = latest.tick || meta.tick || 1;
+  const _avgMs = _brainMs / _tick;
+  document.getElementById('m3').innerHTML = (neural.total_spikes||0).toLocaleString() + ' spikes · ' + _brainMs.toFixed(0) + 'ms累積<br>平均 ' + _avgMs.toFixed(0) + ' ms/步';
   const side4 = neural.side || 'HOLD';
   const m4el = document.getElementById('m4');
   m4el.textContent = side4 === 'BUY' ? '買 BUY' : side4 === 'SELL' ? '賣 SELL' : '持有 HOLD';
@@ -2187,7 +2190,8 @@ function updateUI() {
     const diff = ((neural.right_hz || 0) - (neural.left_hz || 0)).toFixed(1);
     const gate = neural.gate_spikes || 0;
     const note = neural.decision_note || '';
-    m4desc.innerHTML = `左${lHz}Hz 右${rHz}Hz 差${diff}Hz · 閘門${gate}<br><span style="color:var(--cyan);font-size:10px;">${note}</span>`;
+    const _lastUpdate = latest.wall_time ? new Date(latest.wall_time * 1000).toLocaleTimeString('zh-TW', {hour12:false}) : '--:--:--';
+    m4desc.innerHTML = `左${lHz}Hz 右${rHz}Hz 差${diff}Hz · 閘門${gate}<br><span style="color:var(--cyan);font-size:10px;">${note} · 更新${_lastUpdate}</span>`;
   }
   const exec5 = latest.execution || {};
     document.getElementById('m5').textContent = exec5.status || '等待';

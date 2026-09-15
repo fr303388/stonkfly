@@ -429,40 +429,39 @@ def main():
             _compute_sec = neural.get("compute_seconds", 0)
             if _compute_sec > 30:
                 print(f"[警告] 神經模擬耗時{_compute_sec:.1f}s，建議睡眠整理", file=sys.stderr, flush=True)
-            # [混合決策] 纏論為主，果蠅強烈訊號可主動交易
+            # [果蠅自由決策] 果蠅自然決策直接生效，纏論作為參考
             if chan_strategy is not None and chan_result is not None:
                 fly_natural_side = neural.get("side", "HOLD")
                 chan_sig = chan_result.get("signal", "HOLD")
                 chan_reason = chan_result.get("reason", "")
                 fly_gate = neural.get("gate_spikes", 0)
                 fly_diff = abs(neural.get("right_hz", 0) - neural.get("left_hz", 0))
-                fly_strong = fly_gate >= 3 and fly_diff >= 3.0  # 果蠅強烈訊號門檻
 
-                if chan_sig == "BUY" and not has_position:
-                    # 纏論買入
-                    if fly_natural_side == "BUY":
+                if fly_natural_side == "BUY" and not has_position:
+                    # 果蠅自由買入
+                    if chan_sig == "BUY":
                         chan_imitation_correct += 1
                     neural["side"] = "BUY"
-                    neural["decision_note"] = f"[纏論主導] {chan_reason} (果蠅{'同意' if fly_natural_side=='BUY' else '觀望'})"
+                    neural["decision_note"] = f"[果蠅自由] 閘門{fly_gate} 左右差{fly_diff:.1f}Hz RSI{rsi_latest if rsi_latest is not None else 50:.0f} (纏論:{chan_sig})"
+                    chan_observations += 1
+                elif fly_natural_side == "SELL" and has_position:
+                    # 果蠅自由賣出
+                    if chan_sig == "SELL":
+                        chan_imitation_correct += 1
+                    neural["side"] = "SELL"
+                    neural["decision_note"] = f"[果蠅自由] 閘門{fly_gate} 左右差{fly_diff:.1f}Hz RSI{rsi_latest if rsi_latest is not None else 50:.0f} (纏論:{chan_sig})"
+                    chan_observations += 1
+                elif chan_sig == "BUY" and not has_position:
+                    # 果蠅觀望，纏論買入參考
+                    neural["side"] = "BUY"
+                    neural["decision_note"] = f"[纏論參考] {chan_reason} (果蠅觀望)"
                 elif chan_sig == "SELL" and has_position:
-                    # 纏論賣出
-                    if fly_natural_side == "SELL":
-                        chan_imitation_correct += 1
+                    # 果蠅觀望，纏論賣出參考
                     neural["side"] = "SELL"
-                    neural["decision_note"] = f"[纏論主導] {chan_reason} (果蠅{'同意' if fly_natural_side=='SELL' else '觀望'})"
-                elif fly_natural_side == "BUY" and not has_position and fly_strong:
-                    # 果蠅強烈看多，主動買入
-                    neural["side"] = "BUY"
-                    neural["decision_note"] = f"[果蠅主導] 閘門{fly_gate} 左右差{fly_diff:.1f}Hz RSI{rsi_val:.0f if rsi_val else 50} (纏論觀望)"
-                    chan_observations += 1
-                elif fly_natural_side == "SELL" and has_position and fly_strong:
-                    # 果蠅強烈看空，主動賣出
-                    neural["side"] = "SELL"
-                    neural["decision_note"] = f"[果蠅主導] 閘門{fly_gate} 左右差{fly_diff:.1f}Hz RSI{rsi_val:.0f if rsi_val else 50} (纏論觀望)"
-                    chan_observations += 1
+                    neural["decision_note"] = f"[纏論參考] {chan_reason} (果蠅觀望)"
                 else:
                     neural["side"] = "HOLD"
-                    neural["decision_note"] = f"[混合] 纏論:{chan_sig} 果蠅:{fly_natural_side} (觀察{chan_observations}次 模仿率{(chan_imitation_correct/chan_observations*100) if chan_observations else 0:.0f}%)"
+                    neural["decision_note"] = f"[觀察] 果蠅:{fly_natural_side} 纏論:{chan_sig} (模仿率{(chan_imitation_correct/chan_observations*100) if chan_observations else 0:.0f}%)"
             neural_side = neural.get("side", "HOLD")
             if take_profit_hit:
                 neural["side"] = "SELL"
