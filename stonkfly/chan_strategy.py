@@ -3,6 +3,8 @@
 使用15分K線的纏論結構 + RSI + 止損做買賣決策（止盈由纏論和果蠅決定）
 更積極交易，避免長時間持有不動
 """
+from .czsc_chart import extract_czsc_structures
+from .czsc_skills import analyze_czsc
 import time
 import json
 import urllib.request
@@ -59,7 +61,6 @@ class ChanAutoStrategy:
 
     def analyze(self, interval="15m"):
         """執行纏論分析，回傳交易訊號"""
-        from .czsc_chart import extract_czsc_structures
 
         klines = self.fetch_klines(interval=interval)
         if len(klines) < 30:
@@ -84,8 +85,15 @@ class ChanAutoStrategy:
         trend = czsc.get("trend", "unknown")
         in_pivot = czsc.get("in_pivot", False)
         last_stroke = czsc.get("last_stroke_direction", "unknown")
-        bull_score = czsc.get("bullish_score", 50)
-        bear_score = czsc.get("bearish_score", 50)
+        # Use czsc_skills.analyze_czsc for proper bull/bear scores
+        try:
+            _closes = [float(k["c"]) for k in klines[-120:]]
+            _czsc_analysis = analyze_czsc(_closes, freq="15分钟")
+            bull_score = _czsc_analysis.get("bullish_score", 50)
+            bear_score = _czsc_analysis.get("bearish_score", 50)
+        except Exception:
+            bull_score = czsc.get("bullish_score", 50)
+            bear_score = czsc.get("bearish_score", 50)
 
         # === 止損（優先級最高，止盈已取消，由纏論和果蠅決定賣出）===
         if self.position_side == "LONG" and self.entry_price:
@@ -99,75 +107,79 @@ class ChanAutoStrategy:
 
         # === 買入訊號（多條件確認）===
         buy_reasons = []
+        buy_conf = 0
 
         # 1. 纏論買點
         for sig in buy_signals:
             if sig["type"] in ("一買", "二買", "三買"):
                 buy_reasons.append(f"{sig['type']}")
-                confidence += 30
+                buy_conf += 30
 
         # 2. 底背馳
         if divergence == "底背馳":
             buy_reasons.append("底背馳")
-            confidence += 25
+            buy_conf += 25
 
         # 3. RSI超賣
         if rsi < 35:
             buy_reasons.append(f"RSI{rsi:.0f}超賣")
-            confidence += 25
+            buy_conf += 25
 
         # 4. 多頭分數明顯領先
         if bull_score >= bear_score + 15:
             buy_reasons.append(f"多頭{bull_score}/{bear_score}")
-            confidence += 20
+            buy_conf += 20
 
         # 5. 向下筆結束（可能反彈）
         if last_stroke == "down" and rsi < 45:
             buy_reasons.append("向下筆末段")
-            confidence += 10
+            buy_conf += 10
 
         # === 賣出訊號 ===
         sell_reasons = []
+        sell_conf = 0
 
         # 1. 纏論賣點
         for sig in sell_signals:
             if sig["type"] in ("一賣", "二賣", "三賣"):
                 sell_reasons.append(f"{sig['type']}")
-                confidence += 30
+                sell_conf += 30
 
         # 2. 頂背馳
         if divergence == "頂背馳":
             sell_reasons.append("頂背馳")
-            confidence += 25
+            sell_conf += 25
 
         # 3. RSI超買
         if rsi > 65:
             sell_reasons.append(f"RSI{rsi:.0f}超買")
-            confidence += 25
+            sell_conf += 25
 
         # 4. 空頭分數明顯領先
         if bear_score >= bull_score + 15:
             sell_reasons.append(f"空頭{bear_score}/{bull_score}")
-            confidence += 20
+            sell_conf += 20
 
         # 5. 向上筆結束（可能回落）
         if last_stroke == "up" and rsi > 55:
             sell_reasons.append("向上筆末段")
-            confidence += 10
+            sell_conf += 10
 
-        # === 最終決策 ===
-        if buy_reasons and confidence >= 40 and self.position_side is None:
+        confidence = max(buy_conf, sell_conf)
+
+        # === 最終決策：比較買賣信心 ===
+        if buy_reasons and buy_conf >= 40 and buy_conf > sell_conf:
             signal = "BUY"
             reason = " + ".join(buy_reasons)
-        elif sell_reasons and confidence >= 40 and self.position_side == "LONG":
+        elif sell_reasons and sell_conf >= 40 and sell_conf > buy_conf:
             signal = "SELL"
             reason = " + ".join(sell_reasons)
-        elif buy_reasons and sell_reasons:
+        elif buy_reasons and sell_reasons and buy_conf >= 40 and sell_conf >= 40:
             # 多空衝突，看分數
-            if bull_score > bear_score + 10 and self.position_side is None:
+            if bull_score > bear_score + 10:
                 signal = "BUY"
                 reason = "多頭為主：" + " + ".join(buy_reasons)
-            elif bear_score > bull_score + 10 and self.position_side == "LONG":
+            elif bear_score > bull_score + 10:
                 signal = "SELL"
                 reason = "空頭為主：" + " + ".join(sell_reasons)
             else:

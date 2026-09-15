@@ -1,0 +1,4 @@
+[策略] 同步持倉: 23.646800 BTC @ $77713.08
+[除錯] tick=315 pos_qty=23.6468 has_position=True _in_cooldown=False _can_add=False avg_entry=0.0 current=77408.0
+[除錯] tick=316 pos_qty=23.6468 has_position=True _in_cooldown=False _can_add=False avg_entry=0.0 current=77422.0
+[除錯] tick=317 pos_qty=23.6468 has_position=True _in_cooldown=False _can_add=False avg_entry=0.0 current=77392.0

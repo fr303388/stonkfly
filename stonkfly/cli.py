@@ -429,49 +429,99 @@ def main():
             _compute_sec = neural.get("compute_seconds", 0)
             if _compute_sec > 30:
                 print(f"[警告] 神經模擬耗時{_compute_sec:.1f}s，建議睡眠整理", file=sys.stderr, flush=True)
-            # [果蠅+纏論並行決策] 任一方有訊號就交易，不需要另一方觀望
+            # [果蠅參考纏論指標自主決策] 果蠅參考纏論數據後自己判斷買賣
+            # 全局冷卻：任何交易後5分鐘內不再交易，避免變成賭徒
+            _global_cooldown = 300  # 5分鐘
+            _time_since_trade = time.time() - last_trade_time if last_trade_time > 0 else 9999
+            _in_cooldown = _time_since_trade < _global_cooldown
+
+            # 加倉限制：已有持倉時，需比均價低6%才能加倉(購買後不追高)，最多10顆BTC
+            _max_position = 10.0
+            _add_position_threshold = 0.06  # 需跌6%才能加倉
+            _can_add_position = True
+            if has_position and pos_qty > 0:
+                if pos_qty >= _max_position:
+                    _can_add_position = False
+                elif avg_entry_price > 0 and current_price > avg_entry_price * (1 - _add_position_threshold):
+                    _can_add_position = False
+
             if chan_strategy is not None and chan_result is not None:
                 fly_natural_side = neural.get("side", "HOLD")
                 chan_sig = chan_result.get("signal", "HOLD")
                 chan_reason = chan_result.get("reason", "")
                 fly_gate = neural.get("gate_spikes", 0)
                 fly_diff = abs(neural.get("right_hz", 0) - neural.get("left_hz", 0))
-                want_buy = (fly_natural_side == "BUY") or (chan_sig == "BUY")
-                want_sell = (fly_natural_side == "SELL") or (chan_sig == "SELL")
+                # 纏論指標細節
+                chan_rsi = chan_result.get("rsi", 0)
+                chan_trend = chan_result.get("trend", "?")
+                chan_bull = chan_result.get("bull_score", 0)
+                chan_bear = chan_result.get("bear_score", 0)
+                chan_pivot = chan_result.get("in_pivot", False)
+                chan_div = chan_result.get("divergence", "")
+                chan_conf = chan_result.get("confidence", 0)
+                chan_czsc = chan_result.get("czsc_signal", "")
+                chan_strokes = chan_result.get("strokes", 0)
+                chan_pivots = chan_result.get("pivots", 0)
+                # 果蠅參考纏論建議再下單：不能自己無腦下單
+                # 買入：雙方共識 或 纏論主導(果蠅不反對)
+                want_buy = (fly_natural_side == "BUY" and chan_sig == "BUY") or (chan_sig == "BUY" and fly_natural_side == "HOLD")
+                # 賣出：雙方共識 或 纏論主導(果蠅不反對)
+                want_sell = (fly_natural_side == "SELL" and chan_sig == "SELL") or (chan_sig == "SELL" and fly_natural_side == "HOLD")
 
-                if want_buy and not has_position:
-                    # 果蠅或纏論說買，無持倉就買入
-                    if fly_natural_side == "BUY" and chan_sig == "BUY":
-                        chan_imitation_correct += 1
-                        decision_tag = "[果蠅+纏論]"
-                        decision_reason = f"果蠅閘門{fly_gate}差{fly_diff:.1f}Hz + 纏論:{chan_reason}"
-                    elif fly_natural_side == "BUY":
-                        decision_tag = "[果蠅自由]"
-                        decision_reason = f"閘門{fly_gate} 左右差{fly_diff:.1f}Hz RSI{rsi_latest if rsi_latest is not None else 50:.0f} (纏論:{chan_sig})"
+                # 建構纏論指標摘要
+                chan_summary = f"RSI{chan_rsi:.0f} 多空{chan_bull}/{chan_bear} 趨勢{chan_trend}"
+                if chan_pivot:
+                    chan_summary += " 中樞內"
+                if chan_div:
+                    chan_summary += f" {chan_div}"
+                if chan_czsc:
+                    chan_summary += f" {chan_czsc}"
+
+                # 纏論賣出模式：有持倉時，纏論指示SELL就全數出清
+                if has_position and chan_sig == "SELL":
+                    # 纏論指示賣出，全數出清
+                    neural["side"] = "SELL"
+                    neural["fly_side"] = fly_natural_side
+                    neural["chan_side"] = "SELL"
+                    _pnl_pct = (current_price - avg_entry_price) / avg_entry_price * 100
+                    if fly_natural_side == "SELL":
+                        decision_tag = "[果蠅+纏論共識賣出]"
+                        decision_reason = f"果蠅與纏論同時指示賣出，{chan_summary}，全數出清，盈虧{_pnl_pct:+.3f}%"
                     else:
-                        decision_tag = "[纏論參考]"
-                        decision_reason = f"{chan_reason} (果蠅:{fly_natural_side})"
-                    neural["side"] = "BUY"
+                        decision_tag = "[纏論主導賣出]"
+                        decision_reason = f"纏論指標觸發賣出:{chan_summary} 信心{chan_conf:.0f}%，果蠅建議{fly_natural_side}，跟隨纏論全數出清，盈虧{_pnl_pct:+.3f}%"
                     neural["decision_note"] = f"{decision_tag} {decision_reason}"
                     chan_observations += 1
-                elif want_sell and has_position:
-                    # 果蠅或纏論說賣，有持倉就賣出
-                    if fly_natural_side == "SELL" and chan_sig == "SELL":
+                elif has_position:
+                    # 已有持倉，纏論未說賣出，繼續持有
+                    neural["side"] = "HOLD"
+                    neural["fly_side"] = fly_natural_side
+                    neural["chan_side"] = chan_sig
+                    _current_pct = (current_price - avg_entry_price) / avg_entry_price * 100
+                    neural["decision_note"] = f"[持有中] 均價${avg_entry_price:.2f} 現價${current_price:.2f} ({_current_pct:+.3f}%) | 等待纏論賣出訊號 | 果蠅:{fly_natural_side} 纏論:{chan_sig}"
+                elif want_buy and not _in_cooldown:
+                    # 無持倉，正常買入
+                    if fly_natural_side == "BUY" and chan_sig == "BUY":
                         chan_imitation_correct += 1
-                        decision_tag = "[果蠅+纏論]"
-                        decision_reason = f"果蠅閘門{fly_gate}差{fly_diff:.1f}Hz + 纏論:{chan_reason}"
-                    elif fly_natural_side == "SELL":
-                        decision_tag = "[果蠅自由]"
-                        decision_reason = f"閘門{fly_gate} 左右差{fly_diff:.1f}Hz RSI{rsi_latest if rsi_latest is not None else 50:.0f} (纏論:{chan_sig})"
+                        decision_tag = "[果蠅+纏論共識]"
+                        decision_reason = f"果蠅參考纏論指標({chan_summary})後同意買入，閘門{fly_gate} 左右腦差{fly_diff:.1f}Hz，雙方共識入場，等待纏論賣出訊號"
                     else:
-                        decision_tag = "[纏論參考]"
-                        decision_reason = f"{chan_reason} (果蠅:{fly_natural_side})"
-                    neural["side"] = "SELL"
+                        decision_tag = "[纏論主導買入]"
+                        decision_reason = f"纏論指標觸發買入:{chan_summary} 信心{chan_conf:.0f}%，果蠅不反對({fly_natural_side})，跟隨入場，等待纏論賣出訊號"
+                    neural["side"] = "BUY"
+                    neural["fly_side"] = fly_natural_side
+                    neural["chan_side"] = chan_sig
                     neural["decision_note"] = f"{decision_tag} {decision_reason}"
                     chan_observations += 1
                 else:
+                    # 無持倉且未觸發買入，觀察
                     neural["side"] = "HOLD"
-                    neural["decision_note"] = f"[觀察] 果蠅:{fly_natural_side} 纏論:{chan_sig} (模仿率{(chan_imitation_correct/chan_observations*100) if chan_observations else 0:.0f}%)"
+                    neural["fly_side"] = fly_natural_side
+                    neural["chan_side"] = chan_sig
+                    _cooldown_note = ""
+                    if _in_cooldown:
+                        _cooldown_note = f" 冷卻中({int(_global_cooldown - _time_since_trade)}s)"
+                    neural["decision_note"] = f"[觀察等待買點] 果蠅:{fly_natural_side} 纏論:{chan_sig} | {chan_summary} | 模仿率{(chan_imitation_correct/chan_observations*100) if chan_observations else 0:.0f}%{_cooldown_note}"
             neural_side = neural.get("side", "HOLD")
             if take_profit_hit:
                 neural["side"] = "SELL"
@@ -708,10 +758,10 @@ def main():
                 except Veto as e:
                     order = {"status": "VETO", "reason": str(e)}
             # Record trade outcome for strategy learning
-            if order.get("status") == "FILLED":
+            if order.get("status") in ("FILLED", "SETTLED"):
                 strategy.record_trade(float(delta))
                 last_trade_time = time.time()  # 40-second cooldown after each trade
-                exec_side = order.get("side", "")
+                exec_side = neural.get("side", order.get("side", ""))
                 if exec_side == "BUY":
                     last_buy_time = time.time()  # track buy time for min hold
                 # After sell, reset grid reference to current price
@@ -737,6 +787,12 @@ def main():
                     new_qty = pos_qty - exec_qty
                     if new_qty <= 0.0001:
                         avg_entry_price = 0.0
+            # Add TP levels and avg entry to neural for UI display
+            neural["tp1"] = round(avg_entry_price * 1.001, 2) if avg_entry_price > 0 else None
+            neural["tp2"] = round(avg_entry_price * 1.002, 2) if avg_entry_price > 0 else None
+            neural["tp3"] = round(avg_entry_price * 1.003, 2) if avg_entry_price > 0 else None
+            neural["avg_entry"] = round(avg_entry_price, 2) if avg_entry_price > 0 else None
+
             row = {
                 "tick": ledger.get("tick"),
                 "wall_time": time.time(),
@@ -760,7 +816,7 @@ def main():
                 "strategy": strategy.to_dict(),
             }
             # Only record actual FILLED trades, not unexecuted BUY/SELL decisions
-            _is_trade = order.get("status") == "FILLED"
+            _is_trade = order.get("status") in ("FILLED", "SETTLED")
             if _is_trade:
                 with (out / "events.jsonl").open("a") as f:
                     f.write(json.dumps(row, allow_nan=False) + "\n")

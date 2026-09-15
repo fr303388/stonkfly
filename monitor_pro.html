@@ -563,11 +563,7 @@
       <button class="tf-btn active" onclick="setTimeframe('1m')" id="tf1m">1分</button>
       <button class="tf-btn" onclick="setTimeframe('5m')" id="tf5m">5分</button>
       <button class="tf-btn" onclick="setTimeframe('15m')" id="tf15m">15分</button>
-      <button class="tf-btn" onclick="setTimeframe('30m')" id="tf30m">30分</button>
-      <button class="tf-btn" onclick="setTimeframe('1h')" id="tf1h">1時</button>
-      <button class="tf-btn" onclick="setTimeframe('4h')" id="tf4h">4時</button>
-      <button class="tf-btn" onclick="setTimeframe('8h')" id="tf8h">8時</button>
-      <button class="tf-btn" onclick="setTimeframe('1d')" id="tf1d">1日</button>
+
       <button class="tf-btn" onclick="toggleAutoRotate()" id="autoRotateBtn" style="background:rgba(0,210,211,0.2);border-color:#00d2d3;color:#00d2d3;">↻ 自動15s</button>
     </span>
     </span>
@@ -640,6 +636,12 @@
 <!-- Three.js -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
 
 <script>
 // ============ STATE ============
@@ -649,6 +651,9 @@ let klines = [];
 let czscStructures = null;
 let events = [];
 let scene, camera, renderer, controls, points, labels = [];
+let composer, bloomPass;
+let neuronFibers = [];
+let brainGlowSprites = [];
 let autoRotate = true;
 let colorMode = 'region';
 let showKC = true;
@@ -661,25 +666,72 @@ function initBrain() {
   const canvas = document.getElementById('brain3d');
   const wrap = canvas.parentElement; const w = canvas.clientWidth || wrap.clientWidth || 400; const h = wrap.clientHeight || 200;
   scene = new THREE.Scene();
+  scene.fog = new THREE.FogExp2(0x000000, 0.3);
   camera = new THREE.PerspectiveCamera(60, w / h, 0.01, 100);
   camera.position.set(0, 0, 2.5);
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   renderer.setSize(w, h, false);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setClearColor(0x000000, 0);
   controls = new THREE.OrbitControls(camera, canvas);
   controls.enableDamping = true;
   controls.dampingFactor = 0.05;
   controls.autoRotate = true;
   controls.autoRotateSpeed = 0.8;
 
+  // Bloom post-processing for glow effect
+  composer = new THREE.EffectComposer(renderer);
+  const renderPass = new THREE.RenderPass(scene, camera);
+  composer.addPass(renderPass);
+  bloomPass = new THREE.UnrealBloomPass(
+    new THREE.Vector2(w, h),
+    0.8,  // strength - subtle glow
+    0.4,  // radius
+    0.2   // threshold - only bright parts glow
+  );
+  composer.addPass(bloomPass);
+
   // Ambient light
-  scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+  scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+
+  // Add central glow sprites for brain regions
+  createBrainGlow();
 
   window.addEventListener('resize', () => {
     const w2 = canvas.clientWidth;
-    camera.aspect = w2 / (canvas.parentElement.clientHeight || 200);
+    const h2 = canvas.parentElement.clientHeight || 200;
+    camera.aspect = w2 / h2;
     camera.updateProjectionMatrix();
-    renderer.setSize(w2, h);
+    renderer.setSize(w2, h2);
+    composer.setSize(w2, h2);
+  });
+}
+
+// Create glowing background sprites for brain regions
+function createBrainGlow() {
+  const glowColors = [0x00ff88, 0xff00ff, 0xffff00, 0x00ffff, 0xff6600];
+  const glowPositions = [
+    [-0.5, 0.2, -0.3], [0.5, 0.1, -0.2], [0, 0.4, 0],
+    [-0.3, -0.2, 0.3], [0.4, -0.1, 0.2]
+  ];
+  glowPositions.forEach((pos, i) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128; canvas.height = 128;
+    const ctx = canvas.getContext('2d');
+    const grad = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+    const color = new THREE.Color(glowColors[i]);
+    grad.addColorStop(0, `rgba(${color.r*255},${color.g*255},${color.b*255},0.4)`);
+    grad.addColorStop(0.5, `rgba(${color.r*255},${color.g*255},${color.b*255},0.1)`);
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 128, 128);
+    const tex = new THREE.CanvasTexture(canvas);
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
+    const sprite = new THREE.Sprite(mat);
+    sprite.position.set(pos[0], pos[1], pos[2]);
+    sprite.scale.set(1.2, 1.2, 1);
+    scene.add(sprite);
+    brainGlowSprites.push(sprite);
   });
 }
 
@@ -727,6 +779,131 @@ function loadBrainPoints() {
       `${n.toLocaleString()} 神經元 · ${(brain3dData.total_spikes||0).toLocaleString()} spikes · ${(brain3dData.active_neurons||0).toLocaleString()} 活躍`;
 
   try { buildSynapses(); } catch(e) { console.warn("buildSynapses error", e); }
+  try { buildNeuronFibers(); } catch(e) { console.warn("buildNeuronFibers error", e); }
+}
+
+// Build HASHFLY-style thin neuron fibers forming fly brain shape
+// Thousands of thin lines, dim by default, glow only when active
+let fiberLines = null;
+let fiberBaseColors = null;
+let fiberActive = null;
+
+function buildNeuronFibers() {
+  if (fiberLines) { scene.remove(fiberLines); fiberLines.geometry.dispose(); fiberLines.material.dispose(); }
+  neuronFibers.forEach(f => { scene.remove(f); f.geometry.dispose(); f.material.dispose(); });
+  neuronFibers = [];
+
+  // Generate fly-brain-shaped neuron positions (ellipsoid brain + ventral cord)
+  const BRAIN_NEURONS = 3000;
+  const positions = [];
+  const colors = [];
+  const rainbow = [
+    [1.0, 0.27, 0.27], [1.0, 0.53, 0.0], [1.0, 1.0, 0.0],
+    [0.27, 1.0, 0.27], [0.0, 1.0, 1.0], [0.27, 0.53, 1.0],
+    [1.0, 0.27, 1.0], [1.0, 0.53, 0.67], [0.53, 1.0, 0.0], [0.0, 1.0, 0.53]
+  ];
+
+  for (let i = 0; i < BRAIN_NEURONS; i++) {
+    let x, y, z;
+    const r = Math.random();
+    if (r < 0.7) {
+      // Brain: ellipsoid (wider in x, flatter in y)
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      const rad = Math.pow(Math.random(), 0.5);
+      x = rad * Math.sin(phi) * Math.cos(theta) * 0.9;
+      y = rad * Math.sin(phi) * Math.sin(theta) * 0.4 + 0.1;
+      z = rad * Math.cos(phi) * 0.5;
+    } else {
+      // Ventral nerve cord: downward column
+      x = (Math.random() - 0.5) * 0.25;
+      y = -0.3 - Math.random() * 0.8;
+      z = (Math.random() - 0.5) * 0.2;
+    }
+    positions.push(x, y, z);
+    const col = rainbow[Math.floor(Math.random() * rainbow.length)];
+    colors.push(col[0], col[1], col[2]);
+  }
+
+  // Generate connections: each neuron connects to 2-3 nearby neurons
+  const linePositions = [];
+  const lineColors = [];
+  const CONNECTIONS_PER_NEURON = 2;
+  const posArr = new Float32Array(positions);
+
+  for (let i = 0; i < BRAIN_NEURONS; i++) {
+    const x1 = posArr[i*3], y1 = posArr[i*3+1], z1 = posArr[i*3+2];
+    // Find nearby neurons
+    const nearby = [];
+    for (let j = 0; j < BRAIN_NEURONS; j++) {
+      if (i === j) continue;
+      const dx = posArr[j*3] - x1;
+      const dy = posArr[j*3+1] - y1;
+      const dz = posArr[j*3+2] - z1;
+      const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+      if (dist < 0.35) nearby.push({j, dist});
+    }
+    nearby.sort((a, b) => a.dist - b.dist);
+    const connectCount = Math.min(CONNECTIONS_PER_NEURON, nearby.length);
+    for (let k = 0; k < connectCount; k++) {
+      const j = nearby[k].j;
+      const x2 = posArr[j*3], y2 = posArr[j*3+1], z2 = posArr[j*3+2];
+      // Curved line with midpoint offset
+      const mx = (x1+x2)/2 + (Math.random()-0.5) * 0.08;
+      const my = (y1+y2)/2 + (Math.random()-0.5) * 0.08;
+      const mz = (z1+z2)/2 + (Math.random()-0.5) * 0.08;
+      linePositions.push(x1, y1, z1, mx, my, mz, mx, my, mz, x2, y2, z2);
+      // Color from first neuron
+      lineColors.push(
+        colors[i*3], colors[i*3+1], colors[i*3+2],
+        colors[i*3], colors[i*3+1], colors[i*3+2],
+        colors[j*3], colors[j*3+1], colors[j*3+2],
+        colors[j*3], colors[j*3+1], colors[j*3+2]
+      );
+    }
+  }
+
+  const lineGeo = new THREE.BufferGeometry();
+  lineGeo.setAttribute('position', new THREE.Float32BufferAttribute(linePositions, 3));
+  lineGeo.setAttribute('color', new THREE.Float32BufferAttribute(lineColors, 3));
+  fiberBaseColors = new Float32Array(lineColors);
+  fiberActive = new Float32Array(linePositions.length / 3).fill(0);
+
+  const lineMat = new THREE.LineBasicMaterial({
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.12,  // dim by default
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  fiberLines = new THREE.LineSegments(lineGeo, lineMat);
+  scene.add(fiberLines);
+}
+
+// Update fiber glow based on neural activity
+function updateFiberGlow() {
+  if (!fiberLines || !brain3dData) return;
+  const spikes = brain3dData.spikes || [];
+  if (spikes.length === 0) return;
+
+  const colors = fiberLines.geometry.attributes.color.array;
+  const n = fiberBaseColors.length / 3;
+  const maxSpike = Math.max(1, ...spikes);
+
+  // Randomly activate fibers based on global activity level
+  const activity = (brain3dData.active_neurons || 0) / (brain3dData.n_neurons || 166700);
+  const glowProbability = 0.02 + activity * 0.15;
+
+  for (let i = 0; i < n; i++) {
+    const isActive = Math.random() < glowProbability;
+    const targetBrightness = isActive ? 1.0 : 0.15;
+    fiberActive[i] = fiberActive[i] * 0.9 + targetBrightness * 0.1;
+    const b = fiberActive[i];
+    colors[i*3] = fiberBaseColors[i*3] * b;
+    colors[i*3+1] = fiberBaseColors[i*3+1] * b;
+    colors[i*3+2] = fiberBaseColors[i*3+2] * b;
+  }
+  fiberLines.geometry.attributes.color.needsUpdate = true;
 }
 
 function buildSynapses() {
@@ -897,8 +1074,22 @@ function animateBrain() {
     }
   } catch(e) { /* silent fail for animation */ }
 
+  // Animate glow sprites
+  brainGlowSprites.forEach((sprite, i) => {
+    const pulse = 0.8 + 0.4 * Math.sin(animTime * 1.5 + i * 1.2);
+    sprite.material.opacity = pulse;
+    sprite.scale.set(1.0 + 0.3 * pulse, 1.0 + 0.3 * pulse, 1);
+  });
+
+  // Update fiber glow based on neural activity
+  try { updateFiberGlow(); } catch(e) {}
+
   controls.update();
-  renderer.render(scene, camera);
+  if (composer) {
+    composer.render();
+  } else {
+    renderer.render(scene, camera);
+  }
 }
 
 function setView(mode) {
@@ -1464,7 +1655,7 @@ let currentTimeframe = '1m';
 
 function setTimeframe(tf) {
   currentTimeframe = tf;
-  ['1m','5m','15m','30m','1h','4h','8h','1d'].forEach(t => {
+  ['1m','5m','15m'].forEach(t => {
     const el = document.getElementById('tf' + t);
     if (el) el.classList.toggle('active', tf === t);
   });
@@ -1489,7 +1680,7 @@ function setTimeframe(tf) {
 }
 
 // Auto-rotate timeframes every 15 seconds
-const TF_ROTATE_LIST = ['1m', '5m', '15m', '30m', '1h', '4h', '8h', '1d'];
+const TF_ROTATE_LIST = ['1m', '5m', '15m'];
 let tfAutoRotate = true;
 let tfRotateIndex = 0;
 let tfRotateTimer = null;
@@ -1551,6 +1742,8 @@ setTimeout(tfStartRotate, 5000);
 let tvChart = null;
 let tvCandleSeries = null;
 let tvVolumeSeries = null;
+let tpLines = [];
+let currentTP = {tp1: null, tp2: null, tp3: null, avg: null};
 let chanStrokeSeries = []; // each stroke gets its own colored series
 
 // Neural synapse connections & firing impulses
@@ -1570,7 +1763,7 @@ function initTvChart() {
     grid: { vertLines: { color: 'rgba(77,208,225,0.06)' }, horzLines: { color: 'rgba(77,208,225,0.06)' } },
     crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
     rightPriceScale: { borderColor: 'rgba(77,208,225,0.2)' },
-    timeScale: { borderColor: 'rgba(77,208,225,0.2)', timeVisible: true, secondsVisible: false },
+    timeScale: { borderColor: 'rgba(77,208,225,0.2)', timeVisible: true, secondsVisible: false, rightOffset: 5, barSpacing: 8 },
     width: container.clientWidth,
     height: container.clientHeight || 480,
   });
@@ -1604,19 +1797,27 @@ function updateTvChart(data, czscStructures) {
   try {
     if (!tvCandleSeries || !data || !data.length) return;
 
+    // Filter by timeframe: 15m shows 6h, others show 3h
+    const now = Date.now();
+    const displayHours = currentTimeframe === '15m' ? 6 : 3;
+    const DISPLAY_MS = displayHours * 60 * 60 * 1000;
+    const filteredData = data.filter(k => (now - k.t) <= DISPLAY_MS);
+    const displayData = filteredData.length > 0 ? filteredData : data.slice(-100);
+
     // 1. Candles
-    const candles = data.map(k => ({
+    const candles = displayData.map(k => ({
       time: Math.floor(k.t / 1000),
       open: k.o, high: k.h, low: k.l, close: k.c,
     }));
     tvCandleSeries.setData(candles);
-    czscKlineData = data;
+    czscKlineData = displayData;
     setTimeout(drawPivotOverlay, 50);
+    updateTPLines();
 
     // 2. Volume
     try {
       if (tvVolumeSeries) {
-        const volumes = data.map(k => ({
+        const volumes = displayData.map(k => ({
           time: Math.floor(k.t / 1000),
           value: k.v,
           color: k.c >= k.o ? 'rgba(38,222,129,0.4)' : 'rgba(252,92,101,0.4)',
@@ -1625,30 +1826,35 @@ function updateTvChart(data, czscStructures) {
       }
     } catch(e) { console.warn('volume setData error', e); }
 
-    // 3. Chan stroke lines - each stroke gets its own colored series (green=up, red=down)
+    // 3. Chan stroke lines - only draw within visible time range
     try {
       chanStrokeSeries.forEach(s => { try { tvChart.removeSeries(s); } catch(e) {} });
       chanStrokeSeries = [];
-      if (czscStructures && czscStructures.strokes && czscStructures.strokes.length > 0) {
+      if (czscStructures && czscStructures.strokes && czscStructures.strokes.length > 0 && displayData.length > 0) {
+        const minTime = Math.floor(displayData[0].t / 1000);
+        const maxTime = Math.floor(displayData[displayData.length-1].t / 1000);
         czscStructures.strokes.forEach(s => {
-          const si = Math.max(0, Math.min(s.start_index, data.length - 1));
-          const ei = Math.max(0, Math.min(s.end_index, data.length - 1));
-          if (data[si] && data[ei] && si !== ei) {
-            const t1 = Math.floor(data[si].t / 1000);
-            const t2 = Math.floor(data[ei].t / 1000);
-            const p1 = parseFloat(s.start_price);
-            const p2 = parseFloat(s.end_price);
-            if (isNaN(p1) || isNaN(p2)) return;
-            const isUp = p2 >= p1;
-            const strokeS = tvChart.addLineSeries({
-              color: isUp ? '#2ed573' : '#ff4757',
-              lineWidth: 2.5,
-              priceLineVisible: false,
-              lastValueVisible: false,
-            });
-            strokeS.setData([{time: t1, value: p1}, {time: t2, value: p2}]);
-            chanStrokeSeries.push(strokeS);
-          }
+          // Use price-based time: find closest kline by price, or use index into original data
+          // Better: use start_index/end_index into original data, but check time range
+          const si = Math.max(0, Math.min(s.start_index || 0, data.length - 1));
+          const ei = Math.max(0, Math.min(s.end_index || 0, data.length - 1));
+          if (!data[si] || !data[ei]) return;
+          const t1 = Math.floor(data[si].t / 1000);
+          const t2 = Math.floor(data[ei].t / 1000);
+          // Only draw if at least partially within visible range
+          if (t2 < minTime || t1 > maxTime) return;
+          const p1 = parseFloat(s.start_price);
+          const p2 = parseFloat(s.end_price);
+          if (isNaN(p1) || isNaN(p2)) return;
+          const isUp = p2 >= p1;
+          const strokeS = tvChart.addLineSeries({
+            color: isUp ? '#2ed573' : '#ff4757',
+            lineWidth: 2.5,
+            priceLineVisible: false,
+            lastValueVisible: false,
+          });
+          strokeS.setData([{time: Math.max(t1, minTime), value: p1}, {time: Math.min(t2, maxTime), value: p2}]);
+          chanStrokeSeries.push(strokeS);
         });
       }
     } catch(e) { console.warn('chan stroke error', e); }
@@ -1716,47 +1922,66 @@ function updateTvChart(data, czscStructures) {
     // 6. Markers (fractals + trades, deduplicated)
     try {
       const allMarkers = [];
-      // Fractals
-      if (czscStructures && czscStructures.fractals) {
+      // Fractals - only show within visible time range, limit count
+      if (czscStructures && czscStructures.fractals && displayData.length > 0) {
+        const minT = Math.floor(displayData[0].t / 1000);
+        const maxT = Math.floor(displayData[displayData.length-1].t / 1000);
+        let fractalCount = 0;
+        const MAX_FRACTALS = 30;
         czscStructures.fractals.forEach(f => {
-          const idx = Math.min(f.index, data.length - 1);
+          if (fractalCount >= MAX_FRACTALS) return;
+          const idx = Math.min(f.index || 0, data.length - 1);
           if (idx >= 0 && data[idx]) {
-            allMarkers.push({
-              time: Math.floor(data[idx].t / 1000),
-              position: f.type === 'top' ? 'aboveBar' : 'belowBar',
-              color: f.type === 'top' ? '#ff4757' : '#2ed573',
-              shape: f.type === 'top' ? 'arrowDown' : 'arrowUp',
-              text: '',
-            });
+            const t = Math.floor(data[idx].t / 1000);
+            if (t >= minT && t <= maxT) {
+              allMarkers.push({
+                time: t,
+                position: f.type === 'top' ? 'aboveBar' : 'belowBar',
+                color: f.type === 'top' ? '#ff4757' : '#2ed573',
+                shape: f.type === 'top' ? 'arrowDown' : 'arrowUp',
+                text: '',
+              });
+              fractalCount++;
+            }
           }
         });
       }
-      // Chan buy/sell signals
-      if (czscStructures && czscStructures.buy_signals) {
+      // Chan buy/sell signals - only show within visible range
+      if (czscStructures && czscStructures.buy_signals && displayData.length > 0) {
+        const minT = Math.floor(displayData[0].t / 1000);
+        const maxT = Math.floor(displayData[displayData.length-1].t / 1000);
         czscStructures.buy_signals.forEach(s => {
-          const idx = Math.min(s.index, data.length - 1);
+          const idx = Math.min(s.index || 0, data.length - 1);
           if (idx >= 0 && data[idx]) {
-            allMarkers.push({
-              time: Math.floor(data[idx].t / 1000),
-              position: 'belowBar',
-              color: '#00d2d3',
-              shape: 'circle',
-              text: s.type || 'B',
-            });
+            const t = Math.floor(data[idx].t / 1000);
+            if (t >= minT && t <= maxT) {
+              allMarkers.push({
+                time: t,
+                position: 'belowBar',
+                color: '#00d2d3',
+                shape: 'circle',
+                text: s.type || 'B',
+              });
+            }
           }
         });
       }
-      if (czscStructures && czscStructures.sell_signals) {
+      if (czscStructures && czscStructures.sell_signals && displayData.length > 0) {
+        const minT = Math.floor(displayData[0].t / 1000);
+        const maxT = Math.floor(displayData[displayData.length-1].t / 1000);
         czscStructures.sell_signals.forEach(s => {
-          const idx = Math.min(s.index, data.length - 1);
+          const idx = Math.min(s.index || 0, data.length - 1);
           if (idx >= 0 && data[idx]) {
-            allMarkers.push({
-              time: Math.floor(data[idx].t / 1000),
-              position: 'aboveBar',
-              color: '#ff6b81',
-              shape: 'circle',
-              text: s.type || 'S',
-            });
+            const t = Math.floor(data[idx].t / 1000);
+            if (t >= minT && t <= maxT) {
+              allMarkers.push({
+                time: t,
+                position: 'aboveBar',
+                color: '#ff6b81',
+                shape: 'circle',
+                text: s.type || 'S',
+              });
+            }
           }
         });
       }
@@ -1804,14 +2029,14 @@ function updateTvChart(data, czscStructures) {
     } catch(e) {}
 
     // 8. Info bar
-    if (data.length > 0) {
-      const max = Math.max(...data.map(k => k.h));
-      const min = Math.min(...data.map(k => k.l));
-      const lastC = data[data.length-1].c;
-      const chg = data[data.length-1].c - data[0].o;
-      const chgPct = (chg / data[0].o) * 100;
+    if (displayData.length > 0) {
+      const max = Math.max(...displayData.map(k => k.h));
+      const min = Math.min(...displayData.map(k => k.l));
+      const lastC = displayData[displayData.length-1].c;
+      const chg = displayData[displayData.length-1].c - displayData[0].o;
+      const chgPct = (chg / displayData[0].o) * 100;
       const info = document.getElementById('klineInfo');
-      if (info) info.textContent = `${currentTimeframe.toUpperCase()} · ${data.length} 根 · 開 $${data[0].o.toFixed(2)} 高 $${max.toFixed(2)} 低 $${min.toFixed(2)} 收 $${lastC.toFixed(2)} · 變動 ${chg >= 0 ? '+' : ''}${chgPct.toFixed(2)}%`;
+      if (info) info.textContent = `${currentTimeframe.toUpperCase()} · 最近${displayHours}小時 ${displayData.length} 根 · 開 $${displayData[0].o.toFixed(2)} 高 $${max.toFixed(2)} 低 $${min.toFixed(2)} 收 $${lastC.toFixed(2)} · 變動 ${chg >= 0 ? '+' : ''}${chgPct.toFixed(2)}%`;
     }
   } catch(e) {
     console.error('[updateTvChart] FATAL', e);
@@ -1819,6 +2044,39 @@ function updateTvChart(data, czscStructures) {
 }
 
 // Draw pivot filled rectangles on overlay canvas (like old Canvas version)
+function updateTPLines() {
+  try {
+    // Remove old TP lines
+    tpLines.forEach(line => {
+      try { tvCandleSeries.removePriceLine(line); } catch(e) {}
+    });
+    tpLines = [];
+
+    if (!tvCandleSeries || !currentTP.avg) return;
+
+    const tpConfigs = [
+      { price: currentTP.tp1, color: '#2ed573', title: 'TP1 +0.1%', lineWidth: 1, lineStyle: 2 },
+      { price: currentTP.tp2, color: '#fed330', title: 'TP2 +0.2%', lineWidth: 1, lineStyle: 2 },
+      { price: currentTP.tp3, color: '#ff6b9d', title: 'TP3 +0.3%', lineWidth: 2, lineStyle: 1 },
+      { price: currentTP.avg, color: '#a55eea', title: '均價', lineWidth: 1, lineStyle: 0 },
+    ];
+
+    tpConfigs.forEach(cfg => {
+      if (cfg.price && cfg.price > 0) {
+        const line = tvCandleSeries.createPriceLine({
+          price: cfg.price,
+          color: cfg.color,
+          lineWidth: cfg.lineWidth,
+          lineStyle: cfg.lineStyle,
+          axisLabelVisible: true,
+          title: cfg.title,
+        });
+        tpLines.push(line);
+      }
+    });
+  } catch(e) { console.warn('TP lines error', e); }
+}
+
 function drawPivotOverlay() {
   try {
     const canvas = document.getElementById('pivotOverlay');
@@ -1842,15 +2100,21 @@ function drawPivotOverlay() {
     const offsetY = chartRect.top - overlayRect.top;
 
     czscStructures.pivots.forEach(zs => {
-      if (!czscKlineData || !czscKlineData.length) return;
-      const x1 = Math.max(0, Math.min(zs.start_index, czscKlineData.length - 1));
-      const x2 = Math.max(0, Math.min(zs.end_index, czscKlineData.length - 1));
+      if (!klines || !klines.length) return;
+      // Use original data indices to get timestamps, then convert to coordinates
+      const x1 = Math.max(0, Math.min(zs.start_index || 0, klines.length - 1));
+      const x2 = Math.max(0, Math.min(zs.end_index || 0, klines.length - 1));
       if (x1 === x2) return;
-      const t1 = Math.floor(czscKlineData[x1].t / 1000);
-      const t2 = Math.floor(czscKlineData[x2].t / 1000);
+      const t1 = Math.floor(klines[x1].t / 1000);
+      const t2 = Math.floor(klines[x2].t / 1000);
       const hi = parseFloat(zs.high);
       const lo = parseFloat(zs.low);
       if (isNaN(hi) || isNaN(lo) || hi <= lo) return;
+      // Skip if pivot completely outside visible range
+      if (!czscKlineData || !czscKlineData.length) return;
+      const minT = Math.floor(czscKlineData[0].t / 1000);
+      const maxT = Math.floor(czscKlineData[czscKlineData.length-1].t / 1000);
+      if (t2 < minT || t1 > maxT) return;
 
       const px1 = tvChart.timeScale().timeToCoordinate(t1);
       const px2 = tvChart.timeScale().timeToCoordinate(t2);
@@ -2097,6 +2361,15 @@ function updateUI() {
   const decEl = document.getElementById('decision');
   decEl.textContent = side === 'BUY' ? '買 BUY' : side === 'SELL' ? '賣 SELL' : '持有 HOLD';
   decEl.className = 'decision-big decision-' + side;
+
+  // Update TP levels for chart display
+  currentTP = {
+    tp1: neural.tp1 || null,
+    tp2: neural.tp2 || null,
+    tp3: neural.tp3 || null,
+    avg: neural.avg_entry || null,
+  };
+  if (tvCandleSeries) updateTPLines();
 
   // Direction based on CZSC bull/bear ratio
   const posDir = document.getElementById('positionDir');
