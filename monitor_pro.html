@@ -367,37 +367,55 @@
 
 <!-- Header -->
 <div class="header">
-  <div class="title">STONKFLY <span>BTC 果蠅</span></div>
+  <div class="title">STONKFLY</div>
   <span class="badge badge-ro" id="modeBadge">模擬</span>
-  <span class="badge badge-paused" id="statusBadge">等待中</span>
+  <span class="badge badge-paused" id="statusBadge">運行中</span>
   <div class="header-stat">步驟 <b id="stepNum">--</b></div>
-  <div class="header-stat">模擬 <b id="simTimer">00:00:00</b></div>
-  <div class="header-stat" title="看門狗自動重啟次數">看門狗 <b id="watchdogCount" style="color:var(--yellow);">0</b> 次</div>
-  <div class="header-stat">淨值 <b id="netValue">$--</b></div>
-  <div class="header-stat" id="computeStatus">等待模擬</div>
+  <div class="header-stat">⏱ <b id="simTimer">00:00:00</b></div>
   <div class="spacer"></div>
-  <div class="header-stat" style="font-family:'JetBrains Mono',monospace;font-size:15px;color:var(--cyan)" id="clock">--:--:--</div>
-  <div class="product-toggle">BTC 果蠅</div>
+  <div class="header-stat" style="font-family:'JetBrains Mono',monospace;font-size:16px;color:var(--cyan);font-weight:700;" id="clock">--:--:--</div>
 </div>
 
-<!-- Account row 1: data metrics -->
-<div class="account-row">
-  <div class="account-item">現金 <b id="cash">--</b></div>
-  <div class="account-item">初始資金 <b id="initialCash">$100</b></div>
-  <div class="account-item">持倉市值 <b id="posValue">--</b></div>
-  <div class="account-item">未實現 <b id="unrealizedPnl">--</b></div>
-  <div class="account-item">總放電 <b id="totalSpikes">--</b></div>
-  <div class="account-item">腦模擬時間 <b id="brainMs">--</b></div>
-</div>
-
-<!-- Account row 2: prominent P&L -->
-<div class="pnl-row">
-  <div class="pnl-row-label">總盈虧（已實現+未實現）</div>
-  <div class="pnl-highlight pnl-big" id="pnlBox">
-    <b id="pnlLive">--</b>
-    <span id="pnlPct" class="pnl-pct">--</span>
+<!-- 簡化帳戶資訊：左邊帳戶，右邊盈虧 -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:0;background:linear-gradient(180deg,rgba(0,210,211,0.08),transparent);border-bottom:1px solid var(--border);">
+  <!-- 左邊：帳戶 -->
+  <div style="padding:14px 20px;display:flex;flex-direction:column;gap:6px;">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;">
+      <span style="font-size:11px;color:var(--dim);letter-spacing:1px;">💰 現金</span>
+      <span id="cash" style="font-size:20px;font-weight:800;color:#fff;font-family:'JetBrains Mono',monospace;">--</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:baseline;">
+      <span style="font-size:11px;color:var(--dim);letter-spacing:1px;">📦 持倉市值</span>
+      <span id="posValue" style="font-size:20px;font-weight:800;color:#00d2d3;font-family:'JetBrains Mono',monospace;">--</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:baseline;">
+      <span style="font-size:11px;color:var(--dim);letter-spacing:1px;">📊 淨值</span>
+      <span id="netValue" style="font-size:18px;font-weight:700;color:#aaa;font-family:'JetBrains Mono',monospace;">--</span>
+    </div>
   </div>
-  <div class="pnl-row-sub" id="pnlSub">--</div>
+  <!-- 右邊：盈虧 -->
+  <div style="padding:14px 20px;display:flex;flex-direction:column;gap:6px;border-left:2px solid var(--border);">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;">
+      <span style="font-size:11px;color:var(--dim);letter-spacing:1px;">📈 未實現盈虧</span>
+      <span id="unrealizedPnl" style="font-size:20px;font-weight:800;font-family:'JetBrains Mono',monospace;">--</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:baseline;">
+      <span style="font-size:11px;color:var(--dim);letter-spacing:1px;">🏆 總盈虧</span>
+      <span id="pnlLive" style="font-size:28px;font-weight:900;font-family:'JetBrains Mono',monospace;text-shadow:0 0 12px currentColor;">--</span>
+    </div>
+    <div id="pnlPct" style="text-align:right;font-size:12px;color:var(--dim);font-family:'JetBrains Mono',monospace;">--</div>
+  </div>
+</div>
+
+<!-- 隱藏但保留ID給JS使用 -->
+<div style="display:none;">
+  <span id="initialCash">$100</span>
+  <span id="totalSpikes">--</span>
+  <span id="brainMs">--</span>
+  <span id="pnlBox"></span>
+  <span id="pnlSub"></span>
+  <span id="watchdogCount">0</span>
+  <span id="computeStatus"></span>
 </div>
 
 <!-- Process flow -->
@@ -405,7 +423,7 @@
   <div class="flow-card" data-step="1" onclick="focusPanel('klineChart')">
     <div><span class="step-num">1</span><span class="step-title">市場數據(15分) + RSI + 纏論</span></div>
     <div class="step-metric" id="m1">-- 根 K 線</div>
-    <div class="step-desc" id="rsiInfo">RSI: -- | 80賣/20買</div>
+    <div class="step-desc" id="rsiInfo">RSI: --</div>
     <div class="step-desc" id="czscInfo" style="margin-top:4px;color:var(--yellow);">纏論: 分析中…</div>
   </div>
   <div class="flow-card" data-step="2" onclick="focusPanel('eyeChart')">
@@ -528,8 +546,6 @@
           <div style="font-size:14px;font-weight:700;color:var(--red);font-family:'JetBrains Mono',monospace;" id="ppl101Spikes">--</div>
         </div>
       </div>
-      <!-- Flex spacer to fill empty space -->
-      <div style="flex:1;"></div>
       <!-- 纏論學習數據 -->
       <div style="background:rgba(168,85,247,0.06);border:1px solid rgba(168,85,247,0.2);border-radius:4px;padding:6px 8px;margin:4px 0;width:100%;box-sizing:border-box;">
         <div style="font-size:10px;color:var(--dim);margin-bottom:3px;">📚 纏論學習</div>
@@ -549,7 +565,8 @@
         <div id="advReviews" style="font-size:10px;color:var(--dim);font-family:'JetBrains Mono',monospace;margin-top:4px;"></div>
         <div id="advLessons" style="font-size:10px;color:#ffa502;font-family:'JetBrains Mono',monospace;margin-top:4px;"></div>
       </div>
-      <div id="stimStatus" style="font-size:10px;color:var(--dim);text-align:center;">無刺激</div>
+      <div id="stimStatus" style="font-size:10px;color:var(--dim);text-align:center;margin-top:6px;">無刺激</div>
+      <div style="flex:1;"></div>
     </div>
   </div>
 </div><!-- /row1 -->
@@ -622,7 +639,36 @@
 <div class="panel" style="margin:0;">
   <div class="panel-header">
     <span><span class="icon">📋</span>交易紀錄</span>
-    <span style="font-size:11px;color:var(--dim)" id="eventCount">0 事件</span>
+    <span style="display:flex;gap:8px;align-items:center;">
+      <button id="tabFly" onclick="switchTradeTab('fly')" style="background:#00d2d3;color:#000;border:none;padding:5px 14px;border-radius:4px;font-size:12px;cursor:pointer;font-weight:700;">果蠅交易 [綜合]</button>
+      <button id="tabNoBrain" onclick="switchTradeTab('nobrain')" style="background:transparent;color:var(--dim);border:1px solid var(--border);padding:5px 14px;border-radius:4px;font-size:12px;cursor:pointer;font-weight:700;">無腦交易 [5分K]</button>
+      <span style="font-size:11px;color:var(--dim);" id="eventCount">0 筆</span>
+    </span>
+  </div>
+  <!-- 盈虧匯總欄 -->
+  <div id="pnlSummary" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:16px 20px;background:linear-gradient(180deg,rgba(0,210,211,0.05),transparent);border-bottom:1px solid var(--border);">
+    <!-- 左邊：帳戶資訊 -->
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;">
+        <span style="font-size:11px;color:var(--dim);letter-spacing:1px;">💰 可用現金</span>
+        <span id="pnlCash" style="font-size:22px;font-weight:900;color:#fff;font-family:'JetBrains Mono',monospace;">--</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;">
+        <span style="font-size:11px;color:var(--dim);letter-spacing:1px;">📦 BTC持倉</span>
+        <span id="pnlPosition" style="font-size:22px;font-weight:900;color:#00d2d3;font-family:'JetBrains Mono',monospace;">--</span>
+      </div>
+    </div>
+    <!-- 右邊：盈虧資訊 -->
+    <div style="display:flex;flex-direction:column;gap:8px;border-left:2px solid var(--border);padding-left:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;">
+        <span style="font-size:11px;color:var(--dim);letter-spacing:1px;">📊 未實現盈虧</span>
+        <span id="pnlUnrealized" style="font-size:20px;font-weight:800;font-family:'JetBrains Mono',monospace;">--</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;">
+        <span style="font-size:11px;color:var(--dim);letter-spacing:1px;">🏆 累計總盈虧</span>
+        <span id="pnlTotal" style="font-size:26px;font-weight:900;font-family:'JetBrains Mono',monospace;text-shadow:0 0 10px currentColor;">--</span>
+      </div>
+    </div>
   </div>
   <div id="eventLog" style="max-height:400px;overflow-y:auto;width:100%;font-family:'JetBrains Mono',monospace;font-size:11px;">
     <div style="padding:20px;text-align:center;color:var(--dim)">載入中…</div>
@@ -1793,7 +1839,7 @@ function loadTradingView(tf) {
   // Data loaded via fetchKlines -> updateTvChart
 }
 
-function updateTvChart(data, czscStructures) {
+function updateTvChart(data, czscStructures, state) {
   try {
     if (!tvCandleSeries || !data || !data.length) return;
 
@@ -1922,28 +1968,32 @@ function updateTvChart(data, czscStructures) {
     // 6. Markers (fractals + trades, deduplicated)
     try {
       const allMarkers = [];
-      // Fractals - only show within visible time range, limit count
+      // Fractals - only show within visible time range, show most recent
       if (czscStructures && czscStructures.fractals && displayData.length > 0) {
         const minT = Math.floor(displayData[0].t / 1000);
         const maxT = Math.floor(displayData[displayData.length-1].t / 1000);
-        let fractalCount = 0;
-        const MAX_FRACTALS = 30;
+        const MAX_FRACTALS = 60;
+        // Collect visible fractals first
+        const visibleFractals = [];
         czscStructures.fractals.forEach(f => {
-          if (fractalCount >= MAX_FRACTALS) return;
           const idx = Math.min(f.index || 0, data.length - 1);
           if (idx >= 0 && data[idx]) {
             const t = Math.floor(data[idx].t / 1000);
             if (t >= minT && t <= maxT) {
-              allMarkers.push({
-                time: t,
-                position: f.type === 'top' ? 'aboveBar' : 'belowBar',
-                color: f.type === 'top' ? '#ff4757' : '#2ed573',
-                shape: f.type === 'top' ? 'arrowDown' : 'arrowUp',
-                text: '',
-              });
-              fractalCount++;
+              visibleFractals.push({...f, time: t});
             }
           }
+        });
+        // Sort by time descending, take most recent N
+        visibleFractals.sort((a, b) => b.time - a.time);
+        visibleFractals.slice(0, MAX_FRACTALS).forEach(f => {
+          allMarkers.push({
+            time: f.time,
+            position: f.type === 'top' ? 'aboveBar' : 'belowBar',
+            color: f.type === 'top' ? '#ff4757' : '#2ed573',
+            shape: f.type === 'top' ? 'arrowDown' : 'arrowUp',
+            text: '',
+          });
         });
       }
       // Chan buy/sell signals - only show within visible range
@@ -1958,9 +2008,9 @@ function updateTvChart(data, czscStructures) {
               allMarkers.push({
                 time: t,
                 position: 'belowBar',
-                color: '#00d2d3',
-                shape: 'circle',
-                text: s.type || 'B',
+                color: '#39ff14',
+                shape: 'arrowUp',
+                text: s.type || 'BUY',
               });
             }
           }
@@ -1977,9 +2027,9 @@ function updateTvChart(data, czscStructures) {
               allMarkers.push({
                 time: t,
                 position: 'aboveBar',
-                color: '#ff6b81',
-                shape: 'circle',
-                text: s.type || 'S',
+                color: '#ff3131',
+                shape: 'arrowDown',
+                text: s.type || 'SELL',
               });
             }
           }
@@ -2008,6 +2058,25 @@ function updateTvChart(data, czscStructures) {
           text: side === 'BUY' ? 'B' : 'S',
         });
       });
+      // No-brain trade markers - orange triangles
+      const nbTrades = (state.no_brain_trades || []);
+      if (nbTrades.length > 0 && displayData.length > 0) {
+        const minT = Math.floor(displayData[0].t / 1000);
+        const maxT = Math.floor(displayData[displayData.length-1].t / 1000);
+        nbTrades.forEach(t => {
+          if (!t.time || !t.side || !t.price) return;
+          const tSec = Math.floor(t.time);
+          if (tSec >= minT && tSec <= maxT) {
+            allMarkers.push({
+              time: tSec,
+              position: t.side === 'BUY' ? 'belowBar' : 'aboveBar',
+              color: '#ff8c00',
+              shape: t.side === 'BUY' ? 'arrowUp' : 'arrowDown',
+              text: t.side === 'BUY' ? 'NB-B' : 'NB-S',
+            });
+          }
+        });
+      }
       // Deduplicate by time+position (trade markers priority)
       const seen = new Set();
       const uniqueMarkers = [];
@@ -2179,9 +2248,9 @@ async function fetchKlines() {
       // Fetch CZSC 缠论 structures for overlay
       fetch('/api/czsc?interval=' + currentTimeframe)
         .then(r => r.json())
-        .then(czsc => { czscStructures = czsc; updateTvChart(data, czsc); })
+        .then(czsc => { czscStructures = czsc; updateTvChart(data, czsc, state); })
         .catch(e => console.error('czsc error', e));
-      updateTvChart(data, czscStructures);
+      updateTvChart(data, czscStructures, state);
       // Recalculate P&L with live price
       if (state) {
         const meta = state.meta || {};
@@ -2258,9 +2327,16 @@ function updatePnL(meta, simEquity, initial) {
   // Position value at real-time bid price
   const posValue = btcAmount > 0 ? btcAmount * markPrice : 0;
   // Unrealized P&L based on real-time bid price (same as equity marking)
-  const unrealized = btcAmount > 0 && avgPrice > 0 ? (markPrice - avgPrice) * btcAmount : 0;
-  // Total P&L = 已實現盈虧 + 未實現盈虧（兩者都用即時價格，確保同步）
-  const totalPnl = totalRealizedPnl + unrealized;
+  let unrealized = btcAmount > 0 && avgPrice > 0 ? (markPrice - avgPrice) * btcAmount : 0;
+  // Add no-brain trading P&L (calculate unrealized ourselves since state always returns 0)
+  const nbState = (state && state.no_brain_state) ? state.no_brain_state : {};
+  const nbPosition = parseFloat(nbState.position || 0) || 0;
+  const nbAvgEntry = parseFloat(nbState.avg_entry || 0) || 0;
+  const nbRealized = parseFloat(nbState.realized_pnl || 0) || 0;
+  const nbUnrealized = nbPosition > 0 && nbAvgEntry > 0 && markPrice > 0 ? (markPrice - nbAvgEntry) * nbPosition : 0;
+  unrealized += nbUnrealized;
+  // Total P&L = 已實現盈虧(果蠅+無腦) + 未實現盈虧(果蠅+無腦)
+  const totalPnl = totalRealizedPnl + nbRealized + unrealized;
   const roi = initial > 0 ? (totalPnl / initial * 100) : 0;
 
   // Position value
@@ -2359,7 +2435,9 @@ function updateUI() {
   // Decision
   const side = neural.side || 'HOLD';
   const decEl = document.getElementById('decision');
-  decEl.textContent = side === 'BUY' ? '買 BUY' : side === 'SELL' ? '賣 SELL' : '持有 HOLD';
+  const flySide = neural.fly_side || side;
+  const chanSide = neural.chan_side || 'HOLD';
+  decEl.innerHTML = `果蠅:<span style="color:${flySide==='BUY'?'#2ed573':flySide==='SELL'?'#ff4757':'#a4b0be'}">${flySide}</span> 纏論:<span style="color:${chanSide==='BUY'?'#2ed573':chanSide==='SELL'?'#ff4757':'#a4b0be'}">${chanSide}</span>`;
   decEl.className = 'decision-big decision-' + side;
 
   // Update TP levels for chart display
@@ -2432,7 +2510,7 @@ function updateUI() {
       let rsiTag = '';
       if (rsi >= 80) { rsiColor = 'var(--red)'; rsiTag = ' 超買'; }
       else if (rsi <= 20) { rsiColor = 'var(--green)'; rsiTag = ' 超賣'; }
-      rsiEl.innerHTML = `RSI <span style="color:${rsiColor};font-weight:700">${rsi.toFixed(1)}</span>${rsiTag} · 80賣/20買`;
+      rsiEl.innerHTML = `RSI <span style="color:${rsiColor};font-weight:700">${rsi.toFixed(1)}</span>${rsiTag}`;
     }
   }
   // CZSC 缠论 signals
@@ -2498,8 +2576,10 @@ function updateUI() {
   const activeCard = document.querySelector(`.flow-card[data-step="${activeStep}"]`);
   if (activeCard) activeCard.classList.add('active');
 
-  // Event log
-  renderEvents(state.events || []);
+  // Event log + P&L summary (update every time for real-time sync)
+  updatePnlSummary(currentTradeTab);
+  if (currentTradeTab === 'fly') renderEvents(state.events || []);
+  else renderNoBrainTrades(state.no_brain_trades || []);
 
   // Dopamine stats (merged into neural monitor)
   const stim = neural.stimulus || 'none';
@@ -2530,12 +2610,155 @@ function toUTC8(ts) {
   return `${h}:${m}:${s}`;
 }
 
+let currentTradeTab = 'fly';
+function switchTradeTab(tab) {
+  currentTradeTab = tab;
+  const flyBtn = document.getElementById('tabFly');
+  const nbBtn = document.getElementById('tabNoBrain');
+  if (tab === 'fly') {
+    flyBtn.style.background = '#00d2d3';
+    flyBtn.style.color = '#000';
+    flyBtn.style.border = 'none';
+    nbBtn.style.background = 'transparent';
+    nbBtn.style.color = 'var(--dim)';
+    nbBtn.style.border = '1px solid var(--border)';
+  } else {
+    nbBtn.style.background = '#ff6b81';
+    nbBtn.style.color = '#000';
+    nbBtn.style.border = 'none';
+    flyBtn.style.background = 'transparent';
+    flyBtn.style.color = 'var(--dim)';
+    flyBtn.style.border = '1px solid var(--border)';
+  }
+  if (state) {
+    updatePnlSummary(tab);
+    if (tab === 'fly') renderEvents(state.events || []);
+    else renderNoBrainTrades(state.no_brain_trades || []);
+  }
+}
+
+function updatePnlSummary(tab) {
+  if (!state) return;
+  const cashEl = document.getElementById('pnlCash');
+  const posEl = document.getElementById('pnlPosition');
+  const unrlEl = document.getElementById('pnlUnrealized');
+  const totalEl = document.getElementById('pnlTotal');
+  if (!cashEl) return;
+  
+  // 獲取即時價格（優先使用quote.bid，確保與上面帳戶區域同步）
+  const latest = state.latest || {};
+  const markPrice = parseFloat(latest.quote?.bid || latest.quote?.price || 0);
+  
+  if (tab === 'fly') {
+    // 果蠅交易盈虧 - 與上面帳戶區域使用相同計算方式
+    const meta = state.meta || {};
+    const cash = parseFloat(meta.cash || 0);
+    const positions = meta.positions || {};
+    const btcAmount = parseFloat(positions['BTC-USDT'] || 0);
+    // 從多個來源獲取均價，優先級：meta.avg_entry_price > neural.avg_entry > 從交易紀錄計算
+    let avgPrice = parseFloat(meta.avg_entry_price || latest.neural?.avg_entry || 0);
+    if (avgPrice <= 0 && btcAmount > 0) {
+      // 從交易紀錄計算加權平均均價
+      const filledTrades = (state.events || []).filter(ev => ev.execution && ev.execution.status === 'FILLED');
+      let totalCost = 0, totalQty = 0;
+      filledTrades.forEach(ev => {
+        const ex = ev.execution || {};
+        const base = parseFloat(ex.base || 0);
+        const quote = parseFloat(ex.quote || 0);
+        const side = ev.neural ? ev.neural.side : '';
+        if (side === 'BUY' && base > 0) {
+          totalCost += quote;
+          totalQty += base;
+        } else if (side === 'SELL' && base > 0) {
+          // 賣出時減少持倉成本（先進先出簡化處理）
+          const avgCost = totalQty > 0 ? totalCost / totalQty : 0;
+          totalCost -= avgCost * Math.min(base, totalQty);
+          totalQty = Math.max(0, totalQty - base);
+        }
+      });
+      avgPrice = totalQty > 0 ? totalCost / totalQty : 0;
+    }
+    const unrealized = btcAmount > 0 && avgPrice > 0 && markPrice > 0 ? (markPrice - avgPrice) * btcAmount : 0;
+    const total = totalRealizedPnl + unrealized;
+    cashEl.textContent = '$' + cash.toLocaleString('en-US', {maximumFractionDigits: 2});
+    posEl.textContent = btcAmount.toFixed(4) + ' BTC';
+    unrlEl.textContent = (unrealized >= 0 ? '+' : '') + '$' + unrealized.toFixed(2);
+    unrlEl.style.color = unrealized >= 0 ? '#39ff14' : '#ff3131';
+    totalEl.textContent = (total >= 0 ? '+' : '') + '$' + total.toFixed(2);
+    totalEl.style.color = total >= 0 ? '#39ff14' : '#ff3131';
+  } else {
+    // 無腦交易盈虧
+    const nb = latest.no_brain || {};
+    const cash = parseFloat(nb.cash || 0);
+    const position = parseFloat(nb.position || 0);
+    const avgEntry = parseFloat(nb.avg_entry || 0);
+    const unrealized = position > 0 && avgEntry > 0 && markPrice > 0 ? (markPrice - avgEntry) * position : 0;
+    const realized = parseFloat(nb.realized_pnl || 0);
+    const total = realized + unrealized;
+    cashEl.textContent = '$' + cash.toLocaleString('en-US', {maximumFractionDigits: 2});
+    posEl.textContent = position.toFixed(6) + ' BTC';
+    unrlEl.textContent = (unrealized >= 0 ? '+' : '') + '$' + unrealized.toFixed(2);
+    unrlEl.style.color = unrealized >= 0 ? '#39ff14' : '#ff3131';
+    totalEl.textContent = (total >= 0 ? '+' : '') + '$' + total.toFixed(2);
+    totalEl.style.color = total >= 0 ? '#39ff14' : '#ff3131';
+  }
+}
+
+function renderNoBrainTrades(trades) {
+  const log = document.getElementById('eventLog');
+  if (!log) return;
+  document.getElementById('eventCount').textContent = trades.length + ' 筆成交';
+  updatePnlSummary('nobrain');
+  if (!trades.length) {
+    log.innerHTML = '<div style="padding:20px;text-align:center;color:var(--dim)">尚無無腦交易記錄…</div>';
+    return;
+  }
+  const gridCols = '34px 62px 42px 56px 62px 56px 52px 1fr';
+  const rows = trades.slice().reverse().map((t, idx) => {
+    const num = trades.length - idx;
+    const time = toUTC8(t.time);
+    const side = t.side || '--';
+    const price = t.price ? '$' + parseFloat(t.price).toFixed(2) : '--';
+    const amount = t.amount ? '$' + parseFloat(t.amount).toFixed(2) : '--';
+    const qty = t.qty ? parseFloat(t.qty).toFixed(6) : '--';
+    const signal = t.signal || '';
+    const pnl = t.pnl != null ? t.pnl : null;
+    const sideColor = side === 'BUY' ? 'var(--green)' : side === 'SELL' ? 'var(--red)' : 'var(--yellow)';
+    let pnlText, pnlColor, pnlPctText, pnlPctColor;
+    const tradeAmount = t.amount ? parseFloat(t.amount) : 0;
+    if (pnl == null || pnl === 0) {
+      pnlText = '--'; pnlColor = 'var(--dim)';
+      pnlPctText = '--'; pnlPctColor = 'var(--dim)';
+    } else {
+      pnlText = (pnl > 0 ? '+' : '') + '$' + pnl.toFixed(4); pnlColor = pnl > 0 ? 'var(--green)' : 'var(--red)';
+      const pct = tradeAmount > 0 ? (pnl / tradeAmount * 100) : 0;
+      pnlPctText = (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%';
+      pnlPctColor = pct >= 0 ? 'var(--green)' : 'var(--red)';
+    }
+    return `<div style="display:grid;grid-template-columns:${gridCols};gap:4px;padding:4px 8px;border-bottom:1px solid var(--border);align-items:center;">
+      <span style="color:var(--dim)">#${num}</span>
+      <span style="color:var(--dim)">${time}</span>
+      <span style="color:${sideColor};font-weight:700">${side}</span>
+      <span style="color:var(--text)">${price}</span>
+      <span style="color:var(--text)">${amount}</span>
+      <span style="color:${pnlColor};white-space:nowrap;text-align:right;">${pnlText}</span>
+      <span style="color:${pnlPctColor};font-weight:600;white-space:nowrap;text-align:right;">${pnlPctText}</span>
+      <span style="color:var(--cyan);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left;" title="${signal}">${signal}</span>
+    </div>`;
+  }).join('');
+  const header = `<div style="display:grid;grid-template-columns:${gridCols};gap:4px;padding:6px 8px;border-bottom:2px solid var(--accent);font-weight:700;color:var(--accent);position:sticky;top:0;background:var(--bg);z-index:1;">
+    <span>#</span><span>時間</span><span>方向</span><span>價格</span><span>金額</span><span>盈虧</span><span>盈虧%</span><span>信號</span>
+  </div>`;
+  log.innerHTML = header + rows;
+}
+
 function renderEvents(events) {
   const log = document.getElementById('eventLog');
   if (!log) return;
   // Only show FILLED trades (filter out VETO/HOLD)
   const filled = events.filter(ev => ev.execution && ev.execution.status === 'FILLED');
   document.getElementById('eventCount').textContent = filled.length + ' 筆成交';
+  updatePnlSummary('fly');
   // Play sound when new trade occurs
   if (filled.length > lastTradeCount && lastTradeCount > 0) {
     try {
@@ -2577,7 +2800,7 @@ function renderEvents(events) {
     }
   });
 
-  const gridCols = '40px 80px 55px 70px 85px 80px 1fr';
+  const gridCols = '34px 62px 42px 56px 62px 56px 52px 1fr';
   const rows = filled.slice().reverse().map(ev => {
     const tick = ev.tick != null ? ev.tick : '--';
     const time = toUTC8(ev.wall_time);
@@ -2586,21 +2809,27 @@ function renderEvents(events) {
     const sideColor = side === 'BUY' ? 'var(--green)' : side === 'SELL' ? 'var(--red)' : 'var(--yellow)';
     // Use actual realized P&L instead of pnl_delta_usdc
     const realized = realizedMap[ev.tick];
-    let pnlText, pnlColor;
-    if (realized == null) {
-      pnlText = '--';
-      pnlColor = 'var(--dim)';
-    } else {
-      pnlText = (realized >= 0 ? '+' : '') + realized.toFixed(4);
-      pnlColor = realized >= 0 ? 'var(--green)' : 'var(--red)';
-    }
+    let pnlText, pnlColor, pnlPctText, pnlPctColor;
     // Execution data
     const ex = ev.execution || {};
     const txAmount = ex.quote ? '$' + parseFloat(ex.quote).toFixed(2) : '--';
+    const txAmountNum = ex.quote ? parseFloat(ex.quote) : 0;
     let fillPrice = '--';
     if (ex.base && ex.quote) {
       const base = parseFloat(ex.base), quoteVal = parseFloat(ex.quote);
       if (base > 0) fillPrice = '$' + (quoteVal / base).toFixed(2);
+    }
+    if (realized == null) {
+      pnlText = '--';
+      pnlColor = 'var(--dim)';
+      pnlPctText = '--';
+      pnlPctColor = 'var(--dim)';
+    } else {
+      pnlText = (realized >= 0 ? '+' : '') + realized.toFixed(4);
+      pnlColor = realized >= 0 ? 'var(--green)' : 'var(--red)';
+      const pct = txAmountNum > 0 ? (realized / txAmountNum * 100) : 0;
+      pnlPctText = (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%';
+      pnlPctColor = pct >= 0 ? 'var(--green)' : 'var(--red)';
     }
     return `<div style="display:grid;grid-template-columns:${gridCols};gap:8px;padding:5px 12px;border-bottom:1px solid rgba(255,255,255,0.04);align-items:center;">
       <span style="color:var(--dim)">#${tick}</span>
@@ -2608,12 +2837,13 @@ function renderEvents(events) {
       <span style="color:${sideColor};font-weight:700">${side}</span>
       <span style="color:var(--yellow);font-family:'JetBrains Mono',monospace">${fillPrice}</span>
       <span style="color:var(--text);font-weight:600">${txAmount}</span>
-      <span style="color:${pnlColor}">${pnlText}</span>
-      <span style="color:var(--dim);font-size:10px;font-weight:bold;">${reason}</span>
+      <span style="color:${pnlColor};white-space:nowrap;text-align:right;">${pnlText}</span>
+      <span style="color:${pnlPctColor};font-weight:600;white-space:nowrap;text-align:right;">${pnlPctText}</span>
+      <span style="color:var(--dim);font-size:10px;font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left;" title="${reason}">${reason}</span>
     </div>`;
   }).join('');
   log.innerHTML = `<div style="display:grid;grid-template-columns:${gridCols};gap:8px;padding:6px 12px;background:var(--panel2);border-bottom:1px solid var(--border);color:var(--dim);font-size:10px;position:sticky;top:0;z-index:1;">
-      <span>編號</span><span>時間 UTC+8</span><span>方向</span><span>價格</span><span>交易金額</span><span>盈虧</span><span>理由</span>
+      <span>編號</span><span>時間 UTC+8</span><span>方向</span><span>價格</span><span>交易金額</span><span>盈虧</span><span>盈虧%</span><span>理由</span>
   </div>` + rows;
 }
 

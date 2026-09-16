@@ -338,9 +338,12 @@ def api_state():
         events = _read_events(RUN_DIR / "events.jsonl")
         brain = _load_brain_summary()
         watchdog = _read_json(RUN_DIR / "watchdog_stats.json") or {"restart_count": 0}
-        return jsonify({"latest": latest, "meta": meta, "events": events, "brain": brain, "watchdog": watchdog, "server_time": time.time()})
+        # 無腦交易紀錄與狀態
+        no_brain_state = _read_json(RUN_DIR / "no_brain_state.json") or {}
+        no_brain_trades = no_brain_state.get("trades", [])
+        return jsonify({"latest": latest, "meta": meta, "events": events, "brain": brain, "watchdog": watchdog, "no_brain_trades": no_brain_trades, "no_brain_state": no_brain_state, "server_time": time.time()})
     except Exception as e:
-        return jsonify({"latest": {}, "meta": {}, "events": [], "brain": {}, "watchdog": {"restart_count": 0}, "error": str(e), "server_time": time.time()})
+        return jsonify({"latest": {}, "meta": {}, "events": [], "brain": {}, "watchdog": {"restart_count": 0}, "no_brain_trades": [], "no_brain_state": {}, "error": str(e), "server_time": time.time()})
 
 
 _brain3d_json_cache = {"json": None, "time": 0}

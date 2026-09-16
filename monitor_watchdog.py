@@ -90,6 +90,27 @@ def is_simulation_stalled():
     return elapsed > STALL_THRESHOLD
 
 
+# Single-instance lock: ensure only one watchdog runs at a time
+LOCK_FILE = ROOT / "runs" / "paper" / "watchdog.lock"
+try:
+    if LOCK_FILE.exists():
+        # Check if the locked process is still alive
+        import ctypes
+        locked_pid = int(LOCK_FILE.read_text().strip())
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.OpenProcess(1, False, locked_pid)
+        if handle:
+            kernel32.CloseHandle(handle)
+            print(f"[錯誤] 看門狗已在運行 (PID={locked_pid})，退出")
+            sys.exit(1)
+        else:
+            # Old process is dead, remove stale lock
+            LOCK_FILE.unlink()
+    LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
+    LOCK_FILE.write_text(str(os.getpid()))
+except Exception as e:
+    print(f"[警告] 無法創建鎖文件: {e}")
+
 print("=" * 60)
 print("  看門狗啟動 (監控伺服器 + 模擬活躍度)")
 print(f"  模擬停滯閾值: {STALL_THRESHOLD}秒 ({STALL_THRESHOLD//60}分鐘)")
@@ -156,6 +177,12 @@ while True:
         try:
             monitor_proc.terminate()
             sim_proc.terminate()
+        except Exception:
+            pass
+        # Remove lock file
+        try:
+            if LOCK_FILE.exists():
+                LOCK_FILE.unlink()
         except Exception:
             pass
         sys.exit(0)

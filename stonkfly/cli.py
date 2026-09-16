@@ -243,6 +243,8 @@ def main():
         from .czsc_skills import analyze_czsc, get_czsc_observation
         from .chan_learning import ChanLearner
         from .chan_practical import ChanPracticalLearner
+        from .chan_no_brain_trader import ChanNoBrainTrader
+        from .czsc_chart import extract_czsc_structures
         from .advanced_learning import AdvancedBrain, TradeReview
         from .trade_reason import generate_buy_reason, generate_sell_reason
         from .market import BinanceMarket, CoinbaseMarket, FixtureMarket
@@ -307,16 +309,18 @@ def main():
             chan_strategy = ChanAutoStrategy(symbol="BTCUSDT", cooldown_seconds=60)
             # Sync strategy position with ledger on startup
             try:
-                _product = settings.products[0]
-                _pos = float(ledger.positions.get(_product, 0))
-                if _pos > 0.0001:
-                    # Calculate avg entry price from cash spent
-                    _cash_spent = float(ledger.get("initial_cash")) - float(ledger.get("cash"))
-                    _avg_price = _cash_spent / _pos if _pos > 0 else None
-                    chan_strategy.update_position("LONG", _avg_price)
-                    print(f"[策略] 同步持倉: {_pos:.6f} BTC @ ${_avg_price:.2f}", file=sys.stderr, flush=True)
-            except Exception as _e:
-                print(f"[策略] 持倉同步失敗: {_e}", file=sys.stderr, flush=True)
+                _product = settings.products[0] if settings.products else None
+                if _product:
+                    _pos = float(ledger.positions.get(_product, 0) or 0)
+                    if _pos > 0.0001:
+                        _init_cash = float(ledger.get("initial_cash") or 0)
+                        _cash = float(ledger.get("cash") or 0)
+                        _cash_spent = _init_cash - _cash
+                        _avg_price = _cash_spent / _pos if _pos > 0 else None
+                        if _avg_price and _avg_price > 0:
+                            chan_strategy.update_position("LONG", _avg_price)
+            except Exception:
+                pass
             print("[纏論自動交易] 測試版已啟用，果蠅將觀察學習纏論決策", flush=True)
         chan_learner = ChanLearner(save_path=out / "chan_knowledge.json")
         practical_learner = ChanPracticalLearner(
@@ -324,6 +328,7 @@ def main():
             practical_path=out / "chan_practical.json"
         )
         advanced_brain = AdvancedBrain(run_dir=out)
+        no_brain_trader = ChanNoBrainTrader(out / "no_brain_state.json", initial_cash=10000.0)
         provider = StonkflyActions(guard, broker)
         action = provider.get_actions()[0]
         count = 0
@@ -414,6 +419,25 @@ def main():
             rsi_latest = float(rsi[-1]) if len(rsi) and not np.isnan(rsi[-1]) else None
             # CZSC 缠论 analysis - fruit fly learns technical analysis skills
             czsc_analysis = analyze_czsc(market.history[product])
+
+            # 無腦交易：基於纏論15分K線買賣標記自動交易（獨立帳戶）
+            try:
+                # 從幣安API獲取5分K線數據（更快的交易頻率）
+                import urllib.request as _ur
+                _nb_url = "https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=200"
+                _nb_req = _ur.Request(_nb_url, headers={"User-Agent": "Mozilla/5.0"})
+                with _ur.urlopen(_nb_req, timeout=10) as _nb_resp:
+                    _nb_raw = json.loads(_nb_resp.read().decode("utf-8"))
+                _klines_for_nb = [{"t": k[0], "o": float(k[1]), "h": float(k[2]), "l": float(k[3]), "c": float(k[4]), "v": float(k[5])} for k in _nb_raw]
+                _czsc_struct = extract_czsc_structures(_klines_for_nb, freq="5m")
+                _czsc_struct["klines"] = _klines_for_nb  # 傳入K線數據用於預測分型
+                _current_price = float(q.bid) if q and hasattr(q, 'bid') else 0.0
+                _nb_result = no_brain_trader.process_signal(_czsc_struct, _current_price)
+                _nb_status = no_brain_trader.get_status(_current_price)
+            except Exception as _nb_err:
+                _nb_result = {"action": "ERROR", "reason": str(_nb_err)}
+                _current_price = float(q.bid) if q and hasattr(q, 'bid') else 0.0
+                _nb_status = no_brain_trader.get_status(_current_price)
             czsc_obs = get_czsc_observation(market.history[product])
             # Price percentile: teach fly to buy at lows, sell at highs
             _prices = np.asarray(market.history[product][-100:], dtype=float)
@@ -429,6 +453,12 @@ def main():
             _compute_sec = neural.get("compute_seconds", 0)
             if _compute_sec > 30:
                 print(f"[警告] 神經模擬耗時{_compute_sec:.1f}s，建議睡眠整理", file=sys.stderr, flush=True)
+            # 進階學習：果蠅在每個tick都進行進階知識學習
+            try:
+                _neural_activity = float(neural.get("total_spikes", 0)) / 1000.0 if neural.get("total_spikes", 0) > 0 else 0.5
+                advanced_brain.study(neural_activity=min(1.0, max(0.1, _neural_activity)))
+            except Exception as _adv_err:
+                pass
             # [果蠅參考纏論指標自主決策] 果蠅參考纏論數據後自己判斷買賣
             # 全局冷卻：任何交易後5分鐘內不再交易，避免變成賭徒
             _global_cooldown = 300  # 5分鐘
@@ -483,7 +513,7 @@ def main():
                     neural["side"] = "SELL"
                     neural["fly_side"] = fly_natural_side
                     neural["chan_side"] = "SELL"
-                    _pnl_pct = (current_price - avg_entry_price) / avg_entry_price * 100
+                    _pnl_pct = (current_price - avg_entry_price) / avg_entry_price * 100 if avg_entry_price > 0 else 0
                     if fly_natural_side == "SELL":
                         decision_tag = "[果蠅+纏論共識賣出]"
                         decision_reason = f"果蠅與纏論同時指示賣出，{chan_summary}，全數出清，盈虧{_pnl_pct:+.3f}%"
@@ -497,7 +527,7 @@ def main():
                     neural["side"] = "HOLD"
                     neural["fly_side"] = fly_natural_side
                     neural["chan_side"] = chan_sig
-                    _current_pct = (current_price - avg_entry_price) / avg_entry_price * 100
+                    _current_pct = (current_price - avg_entry_price) / avg_entry_price * 100 if avg_entry_price > 0 else 0
                     neural["decision_note"] = f"[持有中] 均價${avg_entry_price:.2f} 現價${current_price:.2f} ({_current_pct:+.3f}%) | 等待纏論賣出訊號 | 果蠅:{fly_natural_side} 纏論:{chan_sig}"
                 elif want_buy and not _in_cooldown:
                     # 無持倉，正常買入
@@ -705,22 +735,42 @@ def main():
                 else:
                     neural["decision_note"] = f"神經觀察中 (差{neural_diff:.1f}Hz RSI{rsi_val:.0f} 知識{overall_know:.0f}%)"
 
-            # VISUAL: Photoreceptor input touches bottom -> buy, touches top -> sell
+            # VISUAL: Photoreceptor input - high point sell all, low point batch entry
             if neural["side"] == "HOLD" and trade_cooldown == 0:
-                if price_percentile <= 25 and not has_position:
+                current_position = float(ledger.positions.get(product, 0)) if has_position else 0.0
+                # Batch entry at lows: lower price = bigger buy
+                if price_percentile <= 5 and current_position < 1.0:
                     neural["side"] = "BUY"
+                    neural["batch_size"] = 0.3  # Third batch at extreme low
                     neural["decision_note"] = generate_buy_reason(
                         rsi=rsi_val, czsc=czsc_analysis, price_percentile=price_percentile,
                         neural_gate=neural_gate, neural_diff=neural_right-neural_left,
                         practical_skill="bottom_fractal", has_position=has_position
-                    ) + " [視覺觸底]"
-                elif price_percentile >= 75 and has_position:
+                    ) + f" [視覺觸底 第3批 {neural['batch_size']}BTC]"
+                elif price_percentile <= 10 and current_position < 0.7:
+                    neural["side"] = "BUY"
+                    neural["batch_size"] = 0.3  # Second batch at very low
+                    neural["decision_note"] = generate_buy_reason(
+                        rsi=rsi_val, czsc=czsc_analysis, price_percentile=price_percentile,
+                        neural_gate=neural_gate, neural_diff=neural_right-neural_left,
+                        practical_skill="bottom_fractal", has_position=has_position
+                    ) + f" [視覺觸底 第2批 {neural['batch_size']}BTC]"
+                elif price_percentile <= 20 and current_position < 0.4:
+                    neural["side"] = "BUY"
+                    neural["batch_size"] = 0.4  # First batch at low
+                    neural["decision_note"] = generate_buy_reason(
+                        rsi=rsi_val, czsc=czsc_analysis, price_percentile=price_percentile,
+                        neural_gate=neural_gate, neural_diff=neural_right-neural_left,
+                        practical_skill="bottom_fractal", has_position=has_position
+                    ) + f" [視覺觸底 第1批 {neural['batch_size']}BTC]"
+                # High point: sell all
+                elif price_percentile >= 90 and has_position:
                     neural["side"] = "SELL"
                     neural["decision_note"] = generate_sell_reason(
                         rsi=rsi_val, czsc=czsc_analysis, price_percentile=price_percentile,
                         neural_gate=neural_gate, neural_diff=neural_right-neural_left,
                         practical_skill="top_fractal", has_position=has_position
-                    ) + " [視覺觸頂]"
+                    ) + " [視覺觸頂 全部賣出]"
 
             # Per-step cooldown: 40 seconds after every step (handled at end of loop)
             cooldown_remaining = 0
@@ -733,13 +783,24 @@ def main():
                 neural["side"] = "HOLD"
                 neural["decision_note"] = f"最短持有中 ({hold_remaining:.0f}秒)"
 
-            # [纏論自動模式] 始終使用纏論決策（包括HOLD），完全覆蓋混合邏輯
+            # [纏論自動模式] 使用纏論決策，但視覺高點賣出優先
+            visual_side = neural["side"]
+            visual_note = neural.get("decision_note", "")
             if chan_strategy is not None:
                 neural["side"] = chan_decision_side
                 neural["decision_note"] = chan_decision_note
+            # 視覺高點賣出優先：價格百分位>=90%且有持倉時，無視纏論直接賣出
+            if price_percentile >= 90 and has_position and visual_side == "SELL":
+                neural["side"] = "SELL"
+                neural["decision_note"] = visual_note + " [高點強制賣出]"
 
             # Unlimited capital mode: no cash check, fixed 0.1 BTC per buy
-            if neural["side"] != "HOLD":
+            # 啟動保護：前10個tick只觀察不交易，讓果蠅先熟悉市場
+            FLY_STARTUP_TICKS = 10
+            if count < FLY_STARTUP_TICKS and neural["side"] != "HOLD":
+                order = {"status": "HOLD", "reason": f"啟動觀察中({count+1}/{FLY_STARTUP_TICKS})，先看後動"}
+                neural["side"] = "HOLD"
+            elif neural["side"] != "HOLD":
                 try:
                     # Neural integration can be slow; use a fresh execution book.
                     fresh = market.snapshot()
@@ -747,10 +808,10 @@ def main():
                     if abs(latest.bid - q.bid) / q.bid > D(settings.slippage):
                         raise Veto("Price moved beyond neural observation tolerance")
                     provider.quotes = fresh
-                    # Fixed 0.1 BTC per buy, unlimited capital
-                    fixed_btc = 1.0
+                    # Use batch_size for buy quantity if available, default 1.0 BTC
+                    fixed_btc = neural.get("batch_size", 1.0)
                     if neural["side"] == "BUY":
-                        guard.strategy_budget = fixed_btc * current_price * 1.01  # 1% buffer for exact 1 BTC for exact 1 BTC fill
+                        guard.strategy_budget = fixed_btc * current_price * 1.01  # 1% buffer for exact fill
                     else:
                         guard.strategy_budget = float(ledger.cash)  # sell all
                     order = action.invoke({"product": product, "side": neural["side"]})
@@ -814,6 +875,8 @@ def main():
                 "chan_practical": practical_learner.get_summary(),
                 "advanced_learning": advanced_brain.get_status(),
                 "strategy": strategy.to_dict(),
+                "no_brain": _nb_status,
+                "no_brain_action": _nb_result,
             }
             # Only record actual FILLED trades, not unexecuted BUY/SELL decisions
             _is_trade = order.get("status") in ("FILLED", "SETTLED")
