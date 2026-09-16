@@ -1,2 +1,0 @@
-{"mode": "paper", "network_execution": false}
-[纏論自動交易] 測試版已啟用，果蠅將觀察學習纏論決策
