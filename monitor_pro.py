@@ -436,6 +436,14 @@ def trade_sound():
     return send_file(p, mimetype="audio/mpeg")
 
 
+@app.route("/fly_brain_3d.js")
+def fly_brain_3d_js():
+    p = Path(__file__).with_name("fly_brain_3d.js")
+    if not p.exists():
+        return ("not found", 404)
+    return send_file(p, mimetype="application/javascript")
+
+
 @app.route("/api/advanced")
 def api_advanced():
     """Advanced learning status: knowledge base, trade reviews, market regime"""

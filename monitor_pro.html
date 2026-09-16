@@ -693,10 +693,12 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+<script src="fly_brain_3d.js"></script>
 
 <script>
 // ============ STATE ============
 let brain3dData = null;
+let flyBrain3d = null;
 let state = null;
 let klines = [];
 let czscStructures = null;
@@ -712,50 +714,20 @@ let showRetina = true;
 let slowmo = 8;
 let animTime = 0;
 
-// ============ 3D BRAIN ============
+// ============ 3D BRAIN (fly-brain style) ============
 function initBrain() {
   const canvas = document.getElementById('brain3d');
-  const wrap = canvas.parentElement; const w = canvas.clientWidth || wrap.clientWidth || 400; const h = wrap.clientHeight || 200;
-  scene = new THREE.Scene();
-  scene.fog = new THREE.FogExp2(0x000000, 0.3);
-  camera = new THREE.PerspectiveCamera(60, w / h, 0.01, 100);
-  camera.position.set(0, 0, 2.5);
-  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
-  renderer.setSize(w, h, false);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.setClearColor(0x000000, 0);
-  controls = new THREE.OrbitControls(camera, canvas);
-  controls.enableDamping = true;
-  controls.dampingFactor = 0.05;
-  controls.autoRotate = true;
-  controls.autoRotateSpeed = 0.8;
-
-  // Bloom post-processing for glow effect
-  composer = new THREE.EffectComposer(renderer);
-  const renderPass = new THREE.RenderPass(scene, camera);
-  composer.addPass(renderPass);
-  bloomPass = new THREE.UnrealBloomPass(
-    new THREE.Vector2(w, h),
-    0.8,  // strength - subtle glow
-    0.4,  // radius
-    0.2   // threshold - only bright parts glow
-  );
-  composer.addPass(bloomPass);
-
-  // Ambient light
-  scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-
-  // Add central glow sprites for brain regions
-  createBrainGlow();
-
-  window.addEventListener('resize', () => {
-    const w2 = canvas.clientWidth;
-    const h2 = canvas.parentElement.clientHeight || 200;
-    camera.aspect = w2 / h2;
-    camera.updateProjectionMatrix();
-    renderer.setSize(w2, h2);
-    composer.setSize(w2, h2);
-  });
+  flyBrain3d = new FlyBrain3D(canvas);
+  flyBrain3d.generateNeurons(166700);
+  flyBrain3d.start();
+  
+  // Hide loading
+  setTimeout(() => {
+    const loading = document.getElementById('brainLoading');
+    if (loading) loading.style.display = 'none';
+    const info = document.getElementById('brainInfo');
+    if (info) info.textContent = '166,700 神經元 · fly-brain 可視化';
+  }, 1000);
 }
 
 // Create glowing background sprites for brain regions
@@ -787,50 +759,28 @@ function createBrainGlow() {
 }
 
 function loadBrainPoints() {
-  if (!brain3dData || !brain3dData.positions) return;
-  // Remove old
-  if (points) { scene.remove(points); points.geometry.dispose(); points.material.dispose(); }
-  labels.forEach(l => scene.remove(l));
-  labels = [];
-
-  const pos = new Float32Array(brain3dData.positions);
-  const colors = new Float32Array(brain3dData.colors);
-  const spikes = brain3dData.spikes;
-  const n = pos.length / 3;
-
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-  // Custom shader for blinking
-  const material = new THREE.PointsMaterial({
-    size: 0.008,
-    vertexColors: true,
-    transparent: true,
-    opacity: 0.85,
-    sizeAttenuation: true,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-  });
-  points = new THREE.Points(geometry, material);
-  scene.add(points);
-
-  // Key cell labels
-  const keyCells = brain3dData.key_cells || {};
-  Object.entries(keyCells).forEach(([name, info]) => {
-    if (!info.position) return;
-    const sprite = makeLabel(name, info.color, info.spikes);
-    sprite.position.set(info.position[0], info.position[1], info.position[2]);
-    scene.add(sprite);
-    labels.push(sprite);
-  });
-
-  document.getElementById('brainLoading').style.display = 'none';
-  document.getElementById('brainInfo').textContent =
-      `${n.toLocaleString()} 神經元 · ${(brain3dData.total_spikes||0).toLocaleString()} spikes · ${(brain3dData.active_neurons||0).toLocaleString()} 活躍`;
-
-  try { buildSynapses(); } catch(e) { console.warn("buildSynapses error", e); }
-  try { buildNeuronFibers(); } catch(e) { console.warn("buildNeuronFibers error", e); }
+  if (!brain3dData || !flyBrain3d) return;
+  
+  // Update activity from backend data
+  const spikes = brain3dData.spikes || [];
+  const spikeIndices = [];
+  const spikeRates = [];
+  
+  // Sample active neurons for visualization
+  for (let i = 0; i < spikes.length && i < 500; i++) {
+    if (spikes[i] > 0) {
+      spikeIndices.push(i);
+      spikeRates.push(Math.min(1.0, spikes[i] / 100));
+    }
+  }
+  
+  flyBrain3d.updateActivity(spikeIndices, spikeRates);
+  
+  // Update info
+  const info = document.getElementById('brainInfo');
+  if (info) {
+    info.textContent = `166,700 神經元 · ${(brain3dData.total_spikes||0).toLocaleString()} spikes · ${(brain3dData.active_neurons||0).toLocaleString()} 活躍`;
+  }
 }
 
 // Build HASHFLY-style thin neuron fibers forming fly brain shape
@@ -1068,79 +1018,7 @@ function animateBrain() {
   animTime += 0.016 * (1 / slowmo);
   heatmapTime += 0.016 * (1 / slowmo);
   drawHeatmap();
-  if (points && colorMode === 'spike' && brain3dData) {
-    // Pulse brightness based on spikes
-    const colors = points.geometry.attributes.color.array;
-    const spikes = brain3dData.spikes;
-    const maxS = Math.max(1, ...spikes);
-    for (let i = 0; i < spikes.length; i++) {
-      const intensity = spikes[i] / maxS;
-      const blink = 0.5 + 0.5 * Math.sin(animTime * 3 + i * 0.1);
-      const b = intensity * (0.4 + 0.6 * blink);
-      colors[i*3] = b;
-      colors[i*3+1] = b * 0.9;
-      colors[i*3+2] = b * 1.2;
-    }
-    points.geometry.attributes.color.needsUpdate = true;
-  }
-  if (points) {
-    // Subtle pulsing of point size based on global activity
-    const pulse = 1 + 0.15 * Math.sin(animTime * 2);
-    points.material.size = 0.008 * pulse;
-  }
-
-  // Animate neural impulses traveling along synapses
-  try {
-    if (impulseParticles && brain3dData && impulseData.length > 0) {
-      const pos = new Float32Array(brain3dData.positions);
-      const impPos = impulseParticles.geometry.attributes.position.array;
-      const impCols = impulseParticles.geometry.attributes.color.array;
-      for (let i = 0; i < impulseData.length; i++) {
-        const imp = impulseData[i];
-        imp.progress += imp.speed;
-        if (imp.progress >= 1) {
-          const activeCount = Math.min(MAX_CONNECTED_NEURONS, pos.length / 3);
-          imp.from = Math.floor(Math.random() * activeCount);
-          imp.to = Math.floor(Math.random() * activeCount);
-          imp.progress = 0;
-          imp.speed = 0.008 + Math.random() * 0.015;
-        }
-        const t = imp.progress;
-        const fromIdx = imp.from, toIdx = imp.to;
-        if (fromIdx < pos.length/3 && toIdx < pos.length/3) {
-          const x = pos[fromIdx*3] + (pos[toIdx*3] - pos[fromIdx*3]) * t;
-          const y = pos[fromIdx*3+1] + (pos[toIdx*3+1] - pos[fromIdx*3+1]) * t + Math.sin(t * Math.PI) * 0.02;
-          const z = pos[fromIdx*3+2] + (pos[toIdx*3+2] - pos[fromIdx*3+2]) * t;
-          impPos[i*3] = x; impPos[i*3+1] = y; impPos[i*3+2] = z;
-          const brightness = Math.sin(t * Math.PI);
-          impCols[i*3] = 1.0; impCols[i*3+1] = 0.9 + 0.1 * brightness; impCols[i*3+2] = 0.4 + 0.6 * brightness;
-        }
-      }
-      impulseParticles.geometry.attributes.position.needsUpdate = true;
-      impulseParticles.geometry.attributes.color.needsUpdate = true;
-    }
-    if (synapseLines && brain3dData) {
-      const activity = (brain3dData.active_neurons || 0) / (brain3dData.n_neurons || 166700);
-      synapseLines.material.opacity = 0.2 + 0.3 * activity + 0.1 * Math.sin(animTime * 3);
-    }
-  } catch(e) { /* silent fail for animation */ }
-
-  // Animate glow sprites
-  brainGlowSprites.forEach((sprite, i) => {
-    const pulse = 0.8 + 0.4 * Math.sin(animTime * 1.5 + i * 1.2);
-    sprite.material.opacity = pulse;
-    sprite.scale.set(1.0 + 0.3 * pulse, 1.0 + 0.3 * pulse, 1);
-  });
-
-  // Update fiber glow based on neural activity
-  try { updateFiberGlow(); } catch(e) {}
-
-  controls.update();
-  if (composer) {
-    composer.render();
-  } else {
-    renderer.render(scene, camera);
-  }
+  // flyBrain3d has its own animation loop with bloom post-processing
 }
 
 function setView(mode) {
