@@ -300,7 +300,7 @@ def main():
         ledger.put("provenance_sha256", signature)
         (out / "provenance.json").write_text(json.dumps(provenance, indent=2) + "\n")
         guard = Guard(settings, ledger, out / "STOP")
-        strategy = StrategyState(name=getattr(a, "strategy", "none"), base_budget=10000000.0)
+        strategy = StrategyState(name=getattr(a, "strategy", "none"), base_budget=100000.0)
         chan_strategy = None
         chan_observations = 0  # 果蠅觀察纏論交易次數
         chan_imitation_correct = 0  # 果蠅自然決策與纏論一致次數
@@ -328,6 +328,11 @@ def main():
             practical_path=out / "chan_practical.json"
         )
         advanced_brain = AdvancedBrain(run_dir=out)
+        from .chanlun_web_learner import get_web_learner
+        web_learner = get_web_learner()
+        web_learner.save_path = out / "chanlun_web_learning.json"
+        web_learner.state = web_learner._load_state()
+        _web_study_counter = 0
         no_brain_trader = ChanNoBrainTrader(out / "no_brain_state.json", initial_cash=10000.0)
         provider = StonkflyActions(guard, broker)
         action = provider.get_actions()[0]
@@ -336,6 +341,7 @@ def main():
         avg_entry_price = 0.0
         trade_cooldown = 0
         last_trade_time = 0.0
+        last_trade_side = None  # 記錄上次交易類型，用於區分買賣冷卻時間
         last_buy_time = 0.0
         MIN_HOLD_SECONDS = 180
         COOLDOWN_SECONDS = 40
@@ -422,14 +428,14 @@ def main():
 
             # 無腦交易：基於纏論15分K線買賣標記自動交易（獨立帳戶）
             try:
-                # 從幣安API獲取5分K線數據（更快的交易頻率）
+                # 從幣安API獲取15分K線數據
                 import urllib.request as _ur
-                _nb_url = "https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=200"
+                _nb_url = "https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=15m&limit=200"
                 _nb_req = _ur.Request(_nb_url, headers={"User-Agent": "Mozilla/5.0"})
                 with _ur.urlopen(_nb_req, timeout=10) as _nb_resp:
                     _nb_raw = json.loads(_nb_resp.read().decode("utf-8"))
                 _klines_for_nb = [{"t": k[0], "o": float(k[1]), "h": float(k[2]), "l": float(k[3]), "c": float(k[4]), "v": float(k[5])} for k in _nb_raw]
-                _czsc_struct = extract_czsc_structures(_klines_for_nb, freq="5m")
+                _czsc_struct = extract_czsc_structures(_klines_for_nb, freq="15m")
                 _czsc_struct["klines"] = _klines_for_nb  # 傳入K線數據用於預測分型
                 _current_price = float(q.bid) if q and hasattr(q, 'bid') else 0.0
                 _nb_result = no_brain_trader.process_signal(_czsc_struct, _current_price)
@@ -460,8 +466,11 @@ def main():
             except Exception as _adv_err:
                 pass
             # [果蠅參考纏論指標自主決策] 果蠅參考纏論數據後自己判斷買賣
-            # 全局冷卻：任何交易後5分鐘內不再交易，避免變成賭徒
-            _global_cooldown = 300  # 5分鐘
+            # 全局冷卻：賣出後15分鐘內不再買入（避免追高），買入後5分鐘內不再交易
+            if last_trade_side == "SELL":
+                _global_cooldown = 900  # 賣出後冷卻15分鐘，避免追高
+            else:
+                _global_cooldown = 300  # 買入後冷卻5分鐘
             _time_since_trade = time.time() - last_trade_time if last_trade_time > 0 else 9999
             _in_cooldown = _time_since_trade < _global_cooldown
 
@@ -822,6 +831,7 @@ def main():
             if order.get("status") in ("FILLED", "SETTLED"):
                 strategy.record_trade(float(delta))
                 last_trade_time = time.time()  # 40-second cooldown after each trade
+                last_trade_side = neural.get("side", None)  # 記錄交易類型用於冷卻
                 exec_side = neural.get("side", order.get("side", ""))
                 if exec_side == "BUY":
                     last_buy_time = time.time()  # track buy time for min hold
@@ -874,6 +884,7 @@ def main():
                 "chan_bias": chan_learner.get_trading_bias(),
                 "chan_practical": practical_learner.get_summary(),
                 "advanced_learning": advanced_brain.get_status(),
+                "web_learning": web_learner.get_status(),
                 "strategy": strategy.to_dict(),
                 "no_brain": _nb_status,
                 "no_brain_action": _nb_result,
@@ -914,6 +925,15 @@ def main():
                     "czsc": czsc_analysis,
                     "price": float(q.bid),
                 }
+                # 每3步學習一篇chanlun.com文章
+                _web_study_counter += 1
+                _web_study_result = None
+                if _web_study_counter >= 3:
+                    _web_study_counter = 0
+                    try:
+                        _web_study_result = web_learner.study_random()
+                    except Exception as _web_err:
+                        print(f"[纏論網路學習] 錯誤: {_web_err}", flush=True)
                 while time.time() < cooldown_end and not (out / "STOP").exists():
                     neural_activity = min(1.0, 0.5 + (neural.get("total_spikes", 100000) / 500000) * 0.3)
                     chan_learner.study_step(neural_activity=neural_activity)

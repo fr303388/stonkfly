@@ -1,4 +1,6 @@
-"""纏論無腦交易模組 - 跟著15分K線買賣標記自動交易，使用獨立虛擬帳戶"""
+"""纏論無腦交易模組 - 跟著15分K線買賣標記自動交易，使用獨立虛擬帳戶
+優化版：加入止損、RSI過濾、趨勢判斷、確認機制
+"""
 
 import json
 import time
@@ -17,11 +19,15 @@ class ChanNoBrainTrader:
         self.avg_entry = 0.0
         self.trades = []  # 交易記錄
         self.last_signal_time = 0  # 避免重複交易
-        self.cooldown_seconds = 60  # 交易冷卻時間
+        self.cooldown_seconds = 900  # 交易冷卻時間改為15分鐘（一根K線）
         self.last_buy_signal_index = -1  # 最後處理的買入信號index
         self.last_sell_signal_index = -1  # 最後處理的賣出信號index
         self.tick_count = 0  # 啟動後的tick計數
         self.startup_protection_ticks = 10  # 重開後前10個tick不交易，先觀察
+        self.stop_loss_pct = 0.03  # 止損比例3%
+        self.stop_loss_price = 0.0  # 止損價格
+        self.take_profit_pct = 0.05  # 止盈比例5%
+        self.take_profit_price = 0.0  # 止盈價格
         self.load()
 
     def load(self):
@@ -37,6 +43,8 @@ class ChanNoBrainTrader:
                 self.last_buy_signal_index = data.get("last_buy_signal_index", -1)
                 self.last_sell_signal_index = data.get("last_sell_signal_index", -1)
                 self.tick_count = data.get("tick_count", 0)
+                self.stop_loss_price = data.get("stop_loss_price", 0.0)
+                self.take_profit_price = data.get("take_profit_price", 0.0)
             except Exception:
                 pass
 
@@ -55,6 +63,8 @@ class ChanNoBrainTrader:
             "realized_pnl": self._calc_realized_pnl(),
             "unrealized_pnl": self._calc_unrealized_pnl(),
             "equity": self.cash + self.position * (self.avg_entry if self.avg_entry > 0 else 0),
+            "stop_loss_price": self.stop_loss_price,
+            "take_profit_price": self.take_profit_price,
         }
         self.state_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
 
@@ -70,12 +80,49 @@ class ChanNoBrainTrader:
         """計算未實現盈虧（需要當前價格，這裡返回0，由調用者更新）"""
         return 0.0
 
+    def _calc_rsi(self, klines, period=14):
+        """計算RSI指標"""
+        if len(klines) < period + 1:
+            return 50.0  # 數據不足時返回中性值
+        closes = [float(k.get("c", 0)) for k in klines[-(period + 1):]]
+        gains = []
+        losses = []
+        for i in range(1, len(closes)):
+            change = closes[i] - closes[i - 1]
+            if change > 0:
+                gains.append(change)
+                losses.append(0)
+            else:
+                gains.append(0)
+                losses.append(abs(change))
+        avg_gain = sum(gains) / period
+        avg_loss = sum(losses) / period
+        if avg_loss == 0:
+            return 100.0
+        rs = avg_gain / avg_loss
+        rsi = 100 - (100 / (1 + rs))
+        return rsi
+
+    def _calc_trend(self, klines):
+        """判斷趨勢：使用短期均線和長期均線"""
+        if len(klines) < 20:
+            return "neutral"
+        closes = [float(k.get("c", 0)) for k in klines]
+        ma5 = sum(closes[-5:]) / 5
+        ma20 = sum(closes[-20:]) / 20
+        if ma5 > ma20 * 1.001:
+            return "uptrend"
+        elif ma5 < ma20 * 0.999:
+            return "downtrend"
+        else:
+            return "neutral"
+
     def process_signal(self, czsc_data: dict, current_price: float):
         """
-        處理纏論信號，執行無腦交易
+        處理纏論信號，執行無腦交易（優化版）
 
         Args:
-            czsc_data: 纏論分析數據，包含fractals（分型）和klines（K線數據，用於預測分型）
+            czsc_data: 纏論分析數據，包含fractals（分型）和klines（K線數據）
             current_price: 當前價格
         """
         now = time.time()
@@ -86,39 +133,107 @@ class ChanNoBrainTrader:
         if self.tick_count <= self.startup_protection_ticks:
             return {"action": "STARTUP_PROTECT", "reason": f"啟動觀察中({self.tick_count}/{self.startup_protection_ticks})，先看後動"}
 
+        # 計算RSI和趨勢
+        klines = czsc_data.get("klines", [])
+        rsi = self._calc_rsi(klines)
+        trend = self._calc_trend(klines)
+
+        # ===== 止損/止盈檢查（優先級最高）=====
+        if self.position > 0:
+            # 止損
+            if self.stop_loss_price > 0 and current_price <= self.stop_loss_price:
+                sell_qty = self.position
+                sell_amount = sell_qty * current_price
+                pnl = (current_price - self.avg_entry) * sell_qty
+                self.cash += sell_amount
+                self.position = 0
+                self.avg_entry = 0.0
+                self.stop_loss_price = 0.0
+                self.take_profit_price = 0.0
+                self.last_signal_time = now
+                trade = {
+                    "time": now,
+                    "side": "SELL",
+                    "price": current_price,
+                    "qty": sell_qty,
+                    "amount": sell_amount,
+                    "signal": "止損賣出",
+                    "signal_index": -1,
+                    "pnl": pnl,
+                    "rsi": round(rsi, 1),
+                    "trend": trend,
+                }
+                self.trades.append(trade)
+                self.save()
+                return {"action": "STOP_LOSS", "price": current_price, "pnl": pnl, "signal": "止損賣出"}
+
+            # 止盈
+            if self.take_profit_price > 0 and current_price >= self.take_profit_price:
+                sell_qty = self.position
+                sell_amount = sell_qty * current_price
+                pnl = (current_price - self.avg_entry) * sell_qty
+                self.cash += sell_amount
+                self.position = 0
+                self.avg_entry = 0.0
+                self.stop_loss_price = 0.0
+                self.take_profit_price = 0.0
+                self.last_signal_time = now
+                trade = {
+                    "time": now,
+                    "side": "SELL",
+                    "price": current_price,
+                    "qty": sell_qty,
+                    "amount": sell_amount,
+                    "signal": "止盈賣出",
+                    "signal_index": -1,
+                    "pnl": pnl,
+                    "rsi": round(rsi, 1),
+                    "trend": trend,
+                }
+                self.trades.append(trade)
+                self.save()
+                return {"action": "TAKE_PROFIT", "price": current_price, "pnl": pnl, "signal": "止盈賣出"}
+
         # 冷卻期檢查
         if now - self.last_signal_time < self.cooldown_seconds:
             return {"action": "COOLDOWN", "reason": f"冷卻中({int(self.cooldown_seconds - (now - self.last_signal_time))}s)"}
 
         fractals = czsc_data.get("fractals", [])
-        klines = czsc_data.get("klines", [])
 
-        # 預測分型：檢查最後3根K線是否正在形成分型，提前進場
-        predicted_type = None
-        if len(klines) >= 3:
-            k1 = klines[-3]
-            k2 = klines[-2]
-            k3 = klines[-1]
-            # 預測底分型：k2低點 < k1低點 且 k3低點 > k2低點（當前K線還在形成中）
-            if k2.get("l", 0) < k1.get("l", 0) and k3.get("l", 0) > k2.get("l", 0):
-                predicted_type = "bottom"
-            # 預測頂分型：k2高點 > k1高點 且 k3高點 < k2高點（當前K線還在形成中）
-            elif k2.get("h", 0) > k1.get("h", 0) and k3.get("h", 0) < k2.get("h", 0):
-                predicted_type = "top"
+        # 只使用已確認的分型，不使用預測分型（減少假信號）
+        if not fractals:
+            if self.position > 0:
+                unrealized = (current_price - self.avg_entry) * self.position
+                return {"action": "HOLD", "reason": f"持有中，等待頂分型，RSI{rsi:.0f}，未實現{unrealized:+.2f}"}
+            else:
+                return {"action": "WAIT", "reason": f"等待底分型，RSI{rsi:.0f}，趨勢{trend}"}
 
-        # 優先使用預測分型，如果沒有則使用已確認的最新分型
-        if predicted_type:
-            latest_type = predicted_type
-            latest_index = len(klines) - 2  # 預測分型的中心點是倒數第2根
-        elif fractals:
-            latest_fractal = fractals[-1]
-            latest_type = latest_fractal.get("type", "")
-            latest_index = latest_fractal.get("index", -1)
-        else:
-            return {"action": "WAIT", "reason": "無分型信號"}
+        latest_fractal = fractals[-1]
+        latest_type = latest_fractal.get("type", "")
+        latest_index = latest_fractal.get("index", -1)
 
-        # 無持倉且最新是底分型 → 買入
+        # 確認分型已經收盤（index不是最後一根K線）
+        if len(klines) > 0 and latest_index >= len(klines) - 1:
+            if self.position > 0:
+                unrealized = (current_price - self.avg_entry) * self.position
+                return {"action": "HOLD", "reason": f"分型未確認，等待收盤，未實現{unrealized:+.2f}"}
+            else:
+                return {"action": "WAIT", "reason": "分型未確認，等待收盤"}
+
+        # 無持倉且最新是底分型 → 買入（加入RSI和趨勢過濾）
         if self.position <= 0 and latest_type == "bottom":
+            # 避免重複處理同一個信號
+            if latest_index == self.last_buy_signal_index:
+                return {"action": "WAIT", "reason": "已處理過此底分型，等待下一個"}
+
+            # RSI過濾：只在RSI較低時買入（超賣區）
+            if rsi > 45:
+                return {"action": "WAIT", "reason": f"底分型但RSI{rsi:.0f}偏高，不買入（等待超賣）"}
+
+            # 趨勢過濾：下跌趨勢中不買入（避免接飛刀）
+            if trend == "downtrend":
+                return {"action": "WAIT", "reason": f"底分型但處於下跌趨勢，不買入（等待趨勢轉好）"}
+
             buy_amount = min(self.cash * 0.95, self.cash)  # 用95%現金買入
             if buy_amount > 10 and current_price > 0:
                 qty = buy_amount / current_price
@@ -127,6 +242,9 @@ class ChanNoBrainTrader:
                 self.cash -= buy_amount
                 self.last_signal_time = now
                 self.last_buy_signal_index = latest_index
+                # 設置止損和止盈
+                self.stop_loss_price = current_price * (1 - self.stop_loss_pct)
+                self.take_profit_price = current_price * (1 + self.take_profit_pct)
                 trade = {
                     "time": now,
                     "side": "BUY",
@@ -136,19 +254,35 @@ class ChanNoBrainTrader:
                     "signal": "底分型買入",
                     "signal_index": latest_index,
                     "pnl": 0,
+                    "rsi": round(rsi, 1),
+                    "trend": trend,
+                    "stop_loss": round(self.stop_loss_price, 2),
+                    "take_profit": round(self.take_profit_price, 2),
                 }
                 self.trades.append(trade)
                 self.save()
-                return {"action": "BUY", "price": current_price, "qty": qty, "signal": "底分型買入"}
+                return {"action": "BUY", "price": current_price, "qty": qty, "signal": f"底分型買入(RSI{rsi:.0f})", "stop_loss": self.stop_loss_price, "take_profit": self.take_profit_price}
 
-        # 有持倉且最新是頂分型 → 賣出
+        # 有持倉且最新是頂分型 → 賣出（加入RSI過濾）
         if self.position > 0 and latest_type == "top":
+            # 避免重複處理同一個信號
+            if latest_index == self.last_sell_signal_index:
+                unrealized = (current_price - self.avg_entry) * self.position
+                return {"action": "HOLD", "reason": f"已處理過此頂分型，等待下一個，未實現{unrealized:+.2f}"}
+
+            # RSI過濾：只在RSI較高時賣出（超買區）
+            if rsi < 55:
+                unrealized = (current_price - self.avg_entry) * self.position
+                return {"action": "HOLD", "reason": f"頂分型但RSI{rsi:.0f}偏低，不賣出（等待超買），未實現{unrealized:+.2f}"}
+
             sell_qty = self.position
             sell_amount = sell_qty * current_price
             pnl = (current_price - self.avg_entry) * sell_qty
             self.cash += sell_amount
             self.position = 0
             self.avg_entry = 0.0
+            self.stop_loss_price = 0.0
+            self.take_profit_price = 0.0
             self.last_signal_time = now
             self.last_sell_signal_index = latest_index
             trade = {
@@ -160,24 +294,19 @@ class ChanNoBrainTrader:
                 "signal": "頂分型賣出",
                 "signal_index": latest_index,
                 "pnl": pnl,
+                "rsi": round(rsi, 1),
+                "trend": trend,
             }
             self.trades.append(trade)
             self.save()
-            return {"action": "SELL", "price": current_price, "pnl": pnl, "signal": "頂分型賣出"}
+            return {"action": "SELL", "price": current_price, "pnl": pnl, "signal": f"頂分型賣出(RSI{rsi:.0f})"}
 
-        # 最新分型與持倉狀態不匹配（有持倉但出現底分型，或無持倉但出現頂分型）
+        # 最新分型與持倉狀態不匹配
         if self.position > 0:
             unrealized = (current_price - self.avg_entry) * self.position
-            return {"action": "HOLD", "reason": f"持有中，最新是底分型，等待頂分型，未實現盈虧{unrealized:+.2f}"}
+            return {"action": "HOLD", "reason": f"持有中，最新是底分型，等待頂分型，RSI{rsi:.0f}，未實現{unrealized:+.2f}"}
         else:
-            return {"action": "WAIT", "reason": "最新是頂分型，等待底分型"}
-
-        # 沒有信號或不滿足條件
-        if self.position > 0:
-            unrealized = (current_price - self.avg_entry) * self.position
-            return {"action": "HOLD", "reason": f"持有中，等待賣出信號，未實現盈虧{unrealized:+.2f}"}
-        else:
-            return {"action": "WAIT", "reason": "等待買入信號"}
+            return {"action": "WAIT", "reason": f"最新是頂分型，等待底分型，RSI{rsi:.0f}，趨勢{trend}"}
 
     def get_status(self, current_price: float = 0):
         """獲取當前狀態"""
@@ -194,4 +323,6 @@ class ChanNoBrainTrader:
             "total_trades": len(self.trades),
             "recent_trades": self.trades[-5:],
             "has_position": self.position > 0,
+            "stop_loss_price": round(self.stop_loss_price, 2),
+            "take_profit_price": round(self.take_profit_price, 2),
         }

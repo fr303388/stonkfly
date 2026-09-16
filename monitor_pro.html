@@ -246,20 +246,20 @@
   .hz-row {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin: 6px 0;
-    font-size: 12px;
+    gap: 6px;
+    margin: 4px 0;
+    font-size: 10px;
   }
-  .hz-label { width: 80px; color: var(--dim); }
+  .hz-label { width: 68px; color: var(--dim); }
   .hz-bar-bg {
     flex: 1;
-    height: 16px;
+    height: 12px;
     background: rgba(255,255,255,0.05);
     border-radius: 3px;
     overflow: hidden;
   }
   .hz-bar { height: 100%; border-radius: 3px; transition: width 0.5s; }
-  .hz-val { width: 60px; text-align: right; font-family: 'JetBrains Mono', monospace; font-weight: 700; }
+  .hz-val { width: 52px; text-align: right; font-family: 'JetBrains Mono', monospace; font-weight: 700; }
   .rule-box {
     margin-top: 10px;
     padding: 8px 10px;
@@ -501,11 +501,11 @@
   </div>
 
   <!-- Neural monitoring (flex:2) -->
-  <div class="panel" style="flex:2;min-width:0;margin:0;display:flex;flex-direction:column;">
+  <div class="panel" style="flex:2;min-width:0;margin:0;display:flex;flex-direction:column;height:420px;max-height:420px;">
     <div class="panel-header">
       <span><span class="icon">⚡</span>神經活動監測</span>
     </div>
-    <div class="panel-body" style="flex:1;display:flex;flex-direction:column;">
+    <div class="panel-body" style="flex:1;min-height:0;display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden;">
       <div style="display:flex;gap:12px;align-items:center;margin-bottom:4px;">
         <div class="decision-big" id="decision" style="flex:1;text-align:center;">HOLD</div>
         <div id="positionDir" style="flex:1;text-align:center;font-size:14px;font-weight:900;font-family:'JetBrains Mono',monospace;color:var(--dim);letter-spacing:2px;"></div>
@@ -565,8 +565,13 @@
         <div id="advReviews" style="font-size:10px;color:var(--dim);font-family:'JetBrains Mono',monospace;margin-top:4px;"></div>
         <div id="advLessons" style="font-size:10px;color:#ffa502;font-family:'JetBrains Mono',monospace;margin-top:4px;"></div>
       </div>
-      <div id="stimStatus" style="font-size:10px;color:var(--dim);text-align:center;margin-top:6px;">無刺激</div>
-      <div style="flex:1;"></div>
+      <!-- Web Learning from chanlun.com -->
+      <div style="background:rgba(168,85,247,0.06);border:1px solid rgba(168,85,247,0.2);border-radius:6px;padding:8px 10px;margin-top:6px;">
+        <div style="font-size:10px;color:#a855f7;font-weight:700;margin-bottom:4px;letter-spacing:1px;">📚 chanlun.com 網路學習</div>
+        <div id="webLearningStatus" style="font-size:10px;color:var(--text);font-family:'JetBrains Mono',monospace;line-height:1.6;">載入中…</div>
+        <div id="webLearningArticle" style="font-size:10px;color:var(--dim);font-family:'JetBrains Mono',monospace;margin-top:4px;line-height:1.5;"></div>
+      </div>
+      <div id="stimStatus" style="font-size:10px;color:var(--dim);text-align:center;margin-top:6px;margin-bottom:4px;">無刺激</div>
     </div>
   </div>
 </div><!-- /row1 -->
@@ -641,7 +646,7 @@
     <span><span class="icon">📋</span>交易紀錄</span>
     <span style="display:flex;gap:8px;align-items:center;">
       <button id="tabFly" onclick="switchTradeTab('fly')" style="background:#00d2d3;color:#000;border:none;padding:5px 14px;border-radius:4px;font-size:12px;cursor:pointer;font-weight:700;">果蠅交易 [綜合]</button>
-      <button id="tabNoBrain" onclick="switchTradeTab('nobrain')" style="background:transparent;color:var(--dim);border:1px solid var(--border);padding:5px 14px;border-radius:4px;font-size:12px;cursor:pointer;font-weight:700;">無腦交易 [5分K]</button>
+      <button id="tabNoBrain" onclick="switchTradeTab('nobrain')" style="background:transparent;color:var(--dim);border:1px solid var(--border);padding:5px 14px;border-radius:4px;font-size:12px;cursor:pointer;font-weight:700;">無腦交易 [15分K]</button>
       <span style="font-size:11px;color:var(--dim);" id="eventCount">0 筆</span>
     </span>
   </div>
@@ -2313,30 +2318,59 @@ function updatePnL(meta, simEquity, initial) {
   for (const [product, amount] of Object.entries(positions)) {
     if (product.startsWith('BTC') || product.startsWith('BNB') || product.startsWith('PEPE')) btcAmount += parseFloat(amount) || 0;
   }
-  // Use simulation equity as authoritative (marked at simulation prices)
-  const equity = simEquity > 0 ? simEquity : cash;
-  // Cost basis = initial - cash (approximate)
-  const costBasis = initial - cash;
-  // Avg entry price
-  const avgPrice = btcAmount > 0 && costBasis > 0 ? costBasis / btcAmount : 0;
-  // Use simulation real-time quote bid price for consistency with equity
+  // Use simulation real-time quote bid price
   const simQuote = (state && state.latest && state.latest.quote) ? state.latest.quote : {};
-  // Use live Binance price first, then simulation quote, then K-line price
   const markPrice = liveBtcPrice > 0 ? liveBtcPrice : (simQuote.bid ? parseFloat(simQuote.bid) : (marketPrice1m > 0 ? marketPrice1m : lastBtcPrice));
-  const simPrice = markPrice;
   // Position value at real-time bid price
   const posValue = btcAmount > 0 ? btcAmount * markPrice : 0;
-  // Unrealized P&L based on real-time bid price (same as equity marking)
-  let unrealized = btcAmount > 0 && avgPrice > 0 ? (markPrice - avgPrice) * btcAmount : 0;
-  // Add no-brain trading P&L (calculate unrealized ourselves since state always returns 0)
+  // 果蠅總權益 = 現金 + 持倉價值
+  const flyEquity = cash + posValue;
+  // 果蠅總盈虧 = 總權益 - 初始資金（最準確，不會重複計算）
+  const flyTotalPnl = flyEquity - initial;
+  // 無腦交易盈虧（從no_brain_state獲取）
   const nbState = (state && state.no_brain_state) ? state.no_brain_state : {};
+  const nbInitial = 10000; // 無腦交易初始資金
+  const nbCash = parseFloat(nbState.cash || 0);
+  const nbPos = parseFloat(nbState.position || 0);
+  const nbEquityFromState = parseFloat(nbState.equity || 0);
+  // 只有當no_brain_state有數據時才計算，否則顯示0（避免-10000）
+  const nbEquity = (nbCash > 0 || nbPos > 0 || nbEquityFromState > 0) ? (nbEquityFromState > 0 ? nbEquityFromState : nbCash + nbPos * markPrice) : 0;
+  const nbTotalPnl = (nbCash > 0 || nbPos > 0 || nbEquityFromState > 0) ? (nbEquity - nbInitial) : 0;
+  // 合計總盈虧 = 果蠅 + 無腦
+  const totalPnl = flyTotalPnl + nbTotalPnl;
+  // 未實現盈虧：直接計算果蠅+無腦的持倉浮動盈虧
+  const nbRealized = parseFloat(nbState.realized_pnl || 0) || 0;
   const nbPosition = parseFloat(nbState.position || 0) || 0;
   const nbAvgEntry = parseFloat(nbState.avg_entry || 0) || 0;
-  const nbRealized = parseFloat(nbState.realized_pnl || 0) || 0;
   const nbUnrealized = nbPosition > 0 && nbAvgEntry > 0 && markPrice > 0 ? (markPrice - nbAvgEntry) * nbPosition : 0;
-  unrealized += nbUnrealized;
-  // Total P&L = 已實現盈虧(果蠅+無腦) + 未實現盈虧(果蠅+無腦)
-  const totalPnl = totalRealizedPnl + nbRealized + unrealized;
+  // 果蠅未實現盈虧：從交易記錄計算持倉均價（系統重啟後neural.avg_entry會變None）
+  let flyAvgEntry = 0;
+  try {
+    if (btcAmount > 0 && state && Array.isArray(state.events)) {
+      const filled = state.events.filter(ev => ev && ev.execution && ev.execution.status === 'FILLED');
+      let posQty = 0, posCost = 0;
+      filled.forEach(ev => {
+        try {
+          const ex = ev.execution || {};
+          const base = parseFloat(ex.base) || 0;
+          const quoteVal = parseFloat(ex.quote) || 0;
+          const price = base > 0 ? quoteVal / base : 0;
+          const side = ev.neural ? ev.neural.side : (ev.side || '');
+          if (side === 'BUY' && base > 0) {
+            const newQty = posQty + base;
+            posCost = newQty > 0 ? (posCost * posQty + price * base) / newQty : 0;
+            posQty = newQty;
+          } else if (side === 'SELL' && base > 0) {
+            posQty = Math.max(0, posQty - base);
+            if (posQty === 0) posCost = 0;
+          }
+        } catch(e) {}
+      });
+      flyAvgEntry = posCost;
+    }
+  } catch(e) { console.warn('計算果蠅均價失敗:', e); }
+  const flyUnrealized = btcAmount > 0 && flyAvgEntry > 0 && markPrice > 0 ? (markPrice - flyAvgEntry) * btcAmount : 0;
+  const unrealized = flyUnrealized + nbUnrealized;
   const roi = initial > 0 ? (totalPnl / initial * 100) : 0;
 
   // Position value
@@ -2393,13 +2427,14 @@ function updatePnL(meta, simEquity, initial) {
   // P&L subtitle
   const pnlSub = document.getElementById('pnlSub');
   if (pnlSub) {
-    const simPriceStr = simPrice > 0 ? '$' + (simPrice < 0.01 ? simPrice.toFixed(8) : simPrice.toFixed(2)) : '--';
-    const avgStr = avgPrice > 0 ? '$' + (avgPrice < 0.01 ? avgPrice.toFixed(8) : avgPrice.toFixed(2)) : '--';
+    const simPriceStr = markPrice > 0 ? '$' + (markPrice < 0.01 ? markPrice.toFixed(8) : markPrice.toFixed(2)) : '--';
+    const avgStr = flyAvgEntry > 0 ? '$' + (flyAvgEntry < 0.01 ? flyAvgEntry.toFixed(8) : flyAvgEntry.toFixed(2)) : '--';
     pnlSub.textContent = `持倉 ${btcAmount > 0 ? btcAmount.toFixed(6) : '0'} BTC · 均價 ${avgStr} · 模擬價 ${simPriceStr} · 現金 $${cash.toFixed(2)}`;
   }
 }
 
 function updateUI() {
+  try {
   if (!state) return;
   const latest = state.latest || {};
   const meta = state.meta || {};
@@ -2407,8 +2442,12 @@ function updateUI() {
 
   // Header
   document.getElementById('stepNum').textContent = latest.tick || meta.tick || 0;
-  const equity = parseFloat(latest.equity_usdc || meta.anchor || 0);
-  document.getElementById('netValue').textContent = '$' + equity.toFixed(4);
+  const flyEquityHeader = parseFloat(latest.equity_usdc || meta.anchor || 0);
+  // 加上無腦交易的權益
+  const nbStateHeader = (state && state.no_brain_state) ? state.no_brain_state : {};
+  const nbEquityHeader = parseFloat(nbStateHeader.equity || 0) || (parseFloat(nbStateHeader.cash || 0) + parseFloat(nbStateHeader.position || 0) * (liveBtcPrice > 0 ? liveBtcPrice : 0));
+  const totalEquityHeader = flyEquityHeader + nbEquityHeader;
+  document.getElementById('netValue').textContent = '$' + totalEquityHeader.toFixed(4);
   const pos = meta.positions || {};
   document.getElementById('computeStatus').textContent =
     neural.compute_seconds ? `模擬耗時 ${neural.compute_seconds.toFixed(1)} 秒` : '';
@@ -2424,13 +2463,19 @@ function updateUI() {
   }
   document.getElementById('modeBadge').textContent = meta.mode === 'live' ? '真實交易' : '模擬 盤中';
 
-  // Account row + real-time P&L
-  document.getElementById('cash').textContent = '$' + (meta.cash ? parseFloat(meta.cash).toFixed(2) : '--');
-  const initial = parseFloat(meta.initial_cash || 1000);
-  document.getElementById('initialCash').textContent = '$' + initial.toFixed(0);
+  // Account row + real-time P&L (顯示果蠅+無腦總和)
+  const nbStateTop = (state && state.no_brain_state) ? state.no_brain_state : {};
+  const nbCashTop = parseFloat(nbStateTop.cash || 0) || 0;
+  const flyCashTop = meta.cash ? parseFloat(meta.cash) : 0;
+  const totalCashTop = flyCashTop + nbCashTop;
+  document.getElementById('cash').textContent = '$' + totalCashTop.toLocaleString('en-US', {maximumFractionDigits: 2});
+  const flyInitial = parseFloat(meta.initial_cash || 1000);
+  const displayInitial = flyInitial + 10000; // 顯示用：果蠅+無腦總和
+  document.getElementById('initialCash').textContent = '$' + displayInitial.toLocaleString('en-US', {maximumFractionDigits: 0});
   document.getElementById('totalSpikes').textContent = (neural.total_spikes || 0).toLocaleString();
   document.getElementById('brainMs').textContent = (neural.brain_ms || 0).toFixed(0) + 'ms';
-  updatePnL(meta, equity, initial);
+  const equity = parseFloat(latest.equity_usdc || meta.anchor || 0); // 果蠅權益，用於updatePnL計算
+  updatePnL(meta, equity, flyInitial); // 計算用：果蠅自己的初始資金
 
   // Decision
   const side = neural.side || 'HOLD';
@@ -2577,9 +2622,12 @@ function updateUI() {
   if (activeCard) activeCard.classList.add('active');
 
   // Event log + P&L summary (update every time for real-time sync)
-  updatePnlSummary(currentTradeTab);
-  if (currentTradeTab === 'fly') renderEvents(state.events || []);
-  else renderNoBrainTrades(state.no_brain_trades || []);
+  // Always calculate totalRealizedPnl first, then update P&L display
+  try { calculateTotalRealizedPnl(state.events || []); } catch(e) { console.warn('calcRealized錯誤:', e); }
+  try {
+    if (currentTradeTab === 'fly') renderEvents(state.events || []);
+    else renderNoBrainTrades(state.no_brain_trades || []);
+  } catch(e) { console.warn('renderTrades錯誤:', e); }
 
   // Dopamine stats (merged into neural monitor)
   const stim = neural.stimulus || 'none';
@@ -2598,6 +2646,7 @@ function updateUI() {
     stimEl.textContent = stimLabel + (stimMs > 0 ? ' ' + stimMs + 'ms' : '');
     stimEl.style.color = stimColor;
   }
+  } catch(e) { console.error('updateUI錯誤:', e); }
 }
 
 // ============ EVENT LOG ============
@@ -2679,6 +2728,12 @@ function updatePnlSummary(tab) {
       avgPrice = totalQty > 0 ? totalCost / totalQty : 0;
     }
     const unrealized = btcAmount > 0 && avgPrice > 0 && markPrice > 0 ? (markPrice - avgPrice) * btcAmount : 0;
+    // 累計總盈虧與上方保持一致：果蠅+無腦交易合計
+    const nbState = (state && state.no_brain_state) ? state.no_brain_state : {};
+    const nbPosition = parseFloat(nbState.position || 0) || 0;
+    const nbAvgEntry = parseFloat(nbState.avg_entry || 0) || 0;
+    const nbRealized = parseFloat(nbState.realized_pnl || 0) || 0;
+    const nbUnrealized = nbPosition > 0 && nbAvgEntry > 0 && markPrice > 0 ? (markPrice - nbAvgEntry) * nbPosition : 0;
     const total = totalRealizedPnl + unrealized;
     cashEl.textContent = '$' + cash.toLocaleString('en-US', {maximumFractionDigits: 2});
     posEl.textContent = btcAmount.toFixed(4) + ' BTC';
@@ -2686,14 +2741,23 @@ function updatePnlSummary(tab) {
     unrlEl.style.color = unrealized >= 0 ? '#39ff14' : '#ff3131';
     totalEl.textContent = (total >= 0 ? '+' : '') + '$' + total.toFixed(2);
     totalEl.style.color = total >= 0 ? '#39ff14' : '#ff3131';
+    totalEl.style.fontSize = '26px';
   } else {
     // 無腦交易盈虧
     const nb = latest.no_brain || {};
     const cash = parseFloat(nb.cash || 0);
     const position = parseFloat(nb.position || 0);
     const avgEntry = parseFloat(nb.avg_entry || 0);
-    const unrealized = position > 0 && avgEntry > 0 && markPrice > 0 ? (markPrice - avgEntry) * position : 0;
+    // 優先使用後端計算的未實現盈虧，確保與no_brain_state.json一致
+    const nbUnrealized = parseFloat(nb.unrealized_pnl);
+    const unrealized = !isNaN(nbUnrealized) ? nbUnrealized : (position > 0 && avgEntry > 0 && markPrice > 0 ? (markPrice - avgEntry) * position : 0);
     const realized = parseFloat(nb.realized_pnl || 0);
+    // 累計總盈虧與上方保持一致：果蠅+無腦交易合計
+    const meta = state.meta || {};
+    const flyPositions = meta.positions || {};
+    const flyBtcAmount = parseFloat(flyPositions['BTC-USDT'] || 0);
+    let flyAvgPrice = parseFloat(meta.avg_entry_price || latest.neural?.avg_entry || 0);
+    const flyUnrealized = flyBtcAmount > 0 && flyAvgPrice > 0 && markPrice > 0 ? (markPrice - flyAvgPrice) * flyBtcAmount : 0;
     const total = realized + unrealized;
     cashEl.textContent = '$' + cash.toLocaleString('en-US', {maximumFractionDigits: 2});
     posEl.textContent = position.toFixed(6) + ' BTC';
@@ -2701,6 +2765,7 @@ function updatePnlSummary(tab) {
     unrlEl.style.color = unrealized >= 0 ? '#39ff14' : '#ff3131';
     totalEl.textContent = (total >= 0 ? '+' : '') + '$' + total.toFixed(2);
     totalEl.style.color = total >= 0 ? '#39ff14' : '#ff3131';
+    totalEl.style.fontSize = '26px';
   }
 }
 
@@ -2752,12 +2817,41 @@ function renderNoBrainTrades(trades) {
   log.innerHTML = header + rows;
 }
 
+function calculateTotalRealizedPnl(events) {
+  // Calculate actual realized P&L by matching buys and sells chronologically
+  const filled = (events || []).filter(ev => ev.execution && ev.execution.status === 'FILLED');
+  const sorted = filled.slice().sort((a, b) => (a.wall_time || 0) - (b.wall_time || 0));
+  let posQty = 0, posCost = 0;
+  let total = 0;
+  sorted.forEach(ev => {
+    const ex = ev.execution || {};
+    const base = parseFloat(ex.base) || 0;
+    const quoteVal = parseFloat(ex.quote) || 0;
+    const price = base > 0 ? quoteVal / base : 0;
+    const side = ev.neural ? ev.neural.side : (ev.side || '');
+    if (side === 'BUY' && base > 0) {
+      const newQty = posQty + base;
+      posCost = newQty > 0 ? (posCost * posQty + price * base) / newQty : 0;
+      posQty = newQty;
+    } else if (side === 'SELL' && base > 0) {
+      const sellQty = Math.min(base, posQty);
+      const realized = (price - posCost) * sellQty;
+      total += realized;
+      posQty = Math.max(0, posQty - base);
+      if (posQty === 0) posCost = 0;
+    }
+  });
+  totalRealizedPnl = total;
+  return total;
+}
+
 function renderEvents(events) {
   const log = document.getElementById('eventLog');
   if (!log) return;
   // Only show FILLED trades (filter out VETO/HOLD)
   const filled = events.filter(ev => ev.execution && ev.execution.status === 'FILLED');
   document.getElementById('eventCount').textContent = filled.length + ' 筆成交';
+  calculateTotalRealizedPnl(events);
   updatePnlSummary('fly');
   // Play sound when new trade occurs
   if (filled.length > lastTradeCount && lastTradeCount > 0) {
@@ -2772,11 +2866,10 @@ function renderEvents(events) {
     return;
   }
 
-  // Calculate actual realized P&L by matching buys and sells chronologically
+  // Calculate actual realized P&L by matching buys and sells chronologically (for per-trade display)
   const sorted = filled.slice().sort((a, b) => (a.wall_time || 0) - (b.wall_time || 0));
   let posQty = 0, posCost = 0; // avg cost basis
   const realizedMap = {};
-  totalRealizedPnl = 0; // reset and recalculate
   sorted.forEach(ev => {
     const ex = ev.execution || {};
     const base = parseFloat(ex.base) || 0;
@@ -2792,7 +2885,6 @@ function renderEvents(events) {
       const sellQty = Math.min(base, posQty);
       const realized = (price - posCost) * sellQty;
       realizedMap[ev.tick] = realized;
-      totalRealizedPnl += realized;
       posQty = Math.max(0, posQty - base);
       if (posQty === 0) posCost = 0;
     } else {
@@ -2963,6 +3055,24 @@ function updateChanLearning() {
       }
     }
   } catch(e) { console.warn('advanced learning error', e); }
+
+  // Web learning update (chanlun.com)
+  try {
+    const wl = state.latest ? state.latest.web_learning : null;
+    if (wl) {
+      const wlStatus = document.getElementById('webLearningStatus');
+      const wlArticle = document.getElementById('webLearningArticle');
+      if (wlStatus) {
+        const lessonProg = (wl.lesson_progress || 0).toFixed(1);
+        const jingduProg = (wl.jingdu_progress || 0).toFixed(1);
+        const total = wl.total_articles_studied || 0;
+        wlStatus.textContent = '課程 ' + (wl.studied_lessons_count || 0) + '/' + (wl.total_lessons || 108) + ' (' + lessonProg + '%) · 精讀 ' + (wl.studied_jingdu_count || 0) + '/' + (wl.total_jingdu || 100) + ' (' + jingduProg + '%) · 共學 ' + total + '篇';
+      }
+      if (wlArticle && wl.current_article_title) {
+        wlArticle.innerHTML = '📖 <a href="' + (wl.current_article_url || '#') + '" target="_blank" style="color:#a855f7;text-decoration:none;">' + wl.current_article_title.substring(0, 50) + '</a>';
+      }
+    }
+  } catch(e) { console.warn('web learning error', e); }
 
   if (!cl) return;
 
