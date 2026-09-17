@@ -18,7 +18,7 @@ import urllib.request
 from pathlib import Path
 
 import numpy as np
-from flask import Flask, jsonify, send_file, make_response
+from flask import Flask, jsonify, send_file, make_response, send_from_directory
 
 app = Flask(__name__)
 
@@ -442,6 +442,18 @@ def fly_brain_3d_js():
     if not p.exists():
         return ("not found", 404)
     return send_file(p, mimetype="application/javascript")
+
+
+@app.route("/brain-atlas/")
+def brain_atlas_index():
+    p = Path(__file__).with_name("brain_atlas")
+    return send_from_directory(p, "index.html")
+
+
+@app.route("/brain-atlas/<path:filename>")
+def brain_atlas_static(filename):
+    p = Path(__file__).with_name("brain_atlas")
+    return send_from_directory(p, filename)
 
 
 @app.route("/api/advanced")

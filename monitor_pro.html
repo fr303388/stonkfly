@@ -460,13 +460,13 @@
   <!-- 3D Brain (flex:3) -->
   <div class="panel brain-panel" id="brainPanel" style="flex:2;min-width:0;margin:0;display:flex;flex-direction:column;">
     <div class="panel-header">
-      <span class="brain-toggle" onclick="toggleBrain()"><span class="icon">🧠</span>三維神經元 + 熱力圖 <span id="brainArrow">▼</span></span>
+      <span class="brain-toggle" onclick="toggleBrain()"><span class="icon">🧠</span>果蠅大腦圖譜 (Fly Brain Atlas) <span id="brainArrow">▼</span></span>
     <span style="font-size:11px;color:var(--dim)" id="brainInfo">載入中…</span>
     </div>
     <div class="brain-wrap" style="position:relative;width:100%;flex:1;min-height:200px;overflow:hidden;">
-      <canvas id="brain3d" style="width:100%;height:100%;"></canvas>
+      <iframe id="brainAtlas" src="/brain-atlas/" style="width:100%;height:100%;border:none;background:#000;" onload="document.getElementById('brainLoading').style.display='none';document.getElementById('brainInfo').textContent='80腦區 · 1,712神經元 · MaleCNS'"></iframe>
       <canvas id="heatmap" style="position:absolute;top:0;left:0;width:100%;height:100%;display:none;pointer-events:none;"></canvas>
-      <div class="loading" id="brainLoading">載入中 166,700 神經元…</div>
+      <div class="loading" id="brainLoading">載入果蠅大腦圖譜… (281MB 3D模型)</div>
     </div>
     <div class="brain-controls">
     <span class="ctrl-label">着色:</span>
