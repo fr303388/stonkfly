@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>果蠅大腦神經元模擬</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<style>
+@font-face {
+  font-family: 'ChironGoRoundTC';
+  src: url('/fonts/ChironGoRoundTC-Regular.ttf') format('truetype');
+  font-weight: 400;
+}
+@font-face {
+  font-family: 'ChironGoRoundTC';
+  src: url('/fonts/ChironGoRoundTC-Bold.ttf') format('truetype');
+  font-weight: 700;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; font-family: 'ChironGoRoundTC', 'Courier New', monospace; }
+body { background: #0a0a12; overflow: hidden; }
+#container { width: 100vw; height: 100vh; position: relative; }
+canvas { display: block; }
+#info {
+    position: absolute; top: 10px; left: 12px;
+    color: #00ffff; font-size: 11px; line-height: 1.6;
+    text-shadow: 0 0 8px #00ffff; pointer-events: none; z-index: 10;
+}
+#stats {
+    position: absolute; bottom: 10px; left: 12px;
+    color: #ff00ff; font-size: 10px; line-height: 1.5;
+    text-shadow: 0 0 8px #ff00ff; pointer-events: none; z-index: 10;
+}
+#activity-bar {
+    position: absolute; bottom: 10px; right: 12px;
+    width: 120px; height: 6px; background: #1a1a2e; border-radius: 3px;
+    overflow: hidden; z-index: 10;
+}
+#activity-fill {
+    height: 100%; background: linear-gradient(90deg, #00ffff, #ff00ff);
+    width: 0%; transition: width 0.2s; box-shadow: 0 0 10px #00ffff;
+}
+</style>
+</head>
+<body>
+<div id="container">
+    <div id="info">果蠅大腦神經元模擬<br>載入中...</div>
+    <div id="stats">初始化...</div>
+    <div id="activity-bar"><div id="activity-fill"></div></div>
+</div>
+<script>
+let scene, camera, renderer, controls;
+let neurons = [], edges = [];
+let positions, nodeColors, nodeActivity, nodeEmphasis;
+let nodesMesh, linesMesh;
+let voltages, currents, spikeCount;
+let nNeurons = 0, nEdges = 0;
+let simStep = 0;
+let lastTime = 0;
+let adjacency = null;
+let stonkflyActivity = null;
+let lastFetch = 0;
+let flyGameActivity = null;
+let lineActivityArr = null;
+let drawnEdgeMap = null;
+
+const TAU_DECAY = 0.92;
+const V_THRESHOLD = 1.0;
+const V_RESET = 0.0;
+const NOISE_AMP = 0.03;
+const DT = 1.0;
+
+async function loadCircuit() {
+    const res = await fetch('/swat/data/circuit-expanded.json');
+    const data = await res.json();
+    neurons = data.neurons;
+    edges = data.edges;
+    nNeurons = neurons.length;
+    nEdges = edges.length;
+    document.getElementById('info').innerHTML = 
+        '果蠅大腦神經元模擬<br>' + nNeurons.toLocaleString() + ' 神經元 · ' + nEdges.toLocaleString() + ' 連接<br><span style="color:#ff00ff">← 接收Stonkfly大腦信號</span>';
+}
+
+function initScene() {
+    const container = document.getElementById('container');
+    const w = window.innerWidth, h = window.innerHeight;
+
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0a0a12);
+
+    camera = new THREE.OrthographicCamera(-w/h*1.5, w/h*1.5, 1.5, -1.5, 0.1, 50);
+    camera.position.set(0, 0, 10);
+
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    renderer.setSize(w, h);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    container.appendChild(renderer.domElement);
+
+    controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.rotateSpeed = 0.6;
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = 0.3;
+}
+
+function initNeurons() {
+    let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity,minZ=Infinity,maxZ=-Infinity;
+    neurons.forEach(n => {
+        minX=Math.min(minX,n.x);maxX=Math.max(maxX,n.x);
+        minY=Math.min(minY,n.y);maxY=Math.max(maxY,n.y);
+        minZ=Math.min(minZ,n.z);maxZ=Math.max(maxZ,n.z);
+    });
+    const cx=(minX+maxX)/2, cy=(minY+maxY)/2, cz=(minZ+maxZ)/2;
+    const scale = 2.0 / Math.max(maxX-minX, maxY-minY, maxZ-minZ);
+
+    positions = new Float32Array(nNeurons * 3);
+    nodeColors = new Float32Array(nNeurons * 3);
+    nodeActivity = new Float32Array(nNeurons);
+    nodeEmphasis = new Float32Array(nNeurons);
+    voltages = new Float32Array(nNeurons);
+    currents = new Float32Array(nNeurons);
+    spikeCount = new Uint32Array(nNeurons);
+
+    const roleColors = {
+        sensory: [0.1, 0.7, 0.9],
+        ascending: [0.15, 0.5, 0.8],
+        optic: [0.2, 0.6, 0.85],
+        central: [0.25, 0.45, 0.7],
+        visual_projection: [0.2, 0.55, 0.8],
+        visual_centrifugal: [0.3, 0.5, 0.75],
+        descending: [0.1, 0.75, 0.75],
+        motor: [0.4, 0.6, 0.9],
+        endocrine: [0.3, 0.6, 0.85],
+        inter: [0.35, 0.5, 0.75],
+    };
+
+    neurons.forEach((n, i) => {
+        positions[i*3] = (n.x - cx) * scale;
+        positions[i*3+1] = -(n.y - cy) * scale;
+        positions[i*3+2] = (n.z - cz) * scale;
+        const c = roleColors[n.role] || [0.4, 0.4, 0.6];
+        nodeColors[i*3] = c[0] * 0.3;
+        nodeColors[i*3+1] = c[1] * 0.3;
+        nodeColors[i*3+2] = c[2] * 0.3;
+        nodeEmphasis[i] = n.type === 'MDN' ? 2.0 : 1.0;
+        voltages[i] = Math.random() * 0.5;
+    });
+
+    const nodeGeom = new THREE.BufferGeometry();
+    nodeGeom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    nodeGeom.setAttribute('color', new THREE.BufferAttribute(nodeColors, 3));
+    nodeGeom.setAttribute('activity', new THREE.BufferAttribute(nodeActivity, 1));
+    nodeGeom.setAttribute('emphasis', new THREE.BufferAttribute(nodeEmphasis, 1));
+
+    const nodeMat = new THREE.ShaderMaterial({
+        uniforms: { pixelRatio: { value: renderer.getPixelRatio() } },
+        vertexShader: [
+            'attribute vec3 color;',
+            'attribute float activity;',
+            'attribute float emphasis;',
+            'uniform float pixelRatio;',
+            'varying vec3 vColor;',
+            'varying float vActivity;',
+            'void main() {',
+            '  vColor = color;',
+            '  vActivity = activity;',
+            '  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);',
+            '  gl_PointSize = (1.8 + sqrt(max(activity, 0.0)) * 5.0) * emphasis * pixelRatio;',
+            '}'
+        ].join('\n'),
+        fragmentShader: [
+            'varying vec3 vColor;',
+            'varying float vActivity;',
+            'void main() {',
+            '  float r = length(gl_PointCoord - vec2(0.5)) * 2.0;',
+            '  if (r > 1.0) discard;',
+            '  float core = 1.0 - smoothstep(0.14, 0.52, r);',
+            '  float halo = (1.0 - smoothstep(0.0, 1.0, r)) * 0.25;',
+            '  float excitation = clamp(vActivity, 0.0, 1.0);',
+            '  float alpha = mix(0.4 * (1.0-smoothstep(.3,1.0,r)), core * 0.9 + halo, sqrt(excitation));',
+            '  vec3 glowColor = mix(vec3(0.0, 0.8, 1.0), vec3(0.6, 0.2, 1.0), excitation);',
+            '  vec3 lit = mix(vColor, glowColor, excitation * 0.7);',
+            '  lit = mix(lit, vec3(1.0), core * excitation * 0.2);',
+            '  gl_FragColor = vec4(lit, alpha);',
+            '}'
+        ].join('\n'),
+        transparent: true,
+        depthWrite: false,
+        depthTest: false,
+    });
+    nodeGeom.attributes.color.setUsage(THREE.DynamicDrawUsage);
+    nodeGeom.attributes.activity.setUsage(THREE.DynamicDrawUsage);
+
+    nodesMesh = new THREE.Points(nodeGeom, nodeMat);
+    nodesMesh.renderOrder = 2;
+    scene.add(nodesMesh);
+
+    // Edges
+    const stride = Math.max(1, Math.ceil(edges.length / 8000));
+    const drawnEdges = edges.filter((_, i) => i % stride === 0);
+    const linePos = new Float32Array(drawnEdges.length * 6);
+    const lineCol = new Float32Array(drawnEdges.length * 6);
+    lineActivityArr = new Float32Array(drawnEdges.length * 2);
+    drawnEdgeMap = new Int32Array(drawnEdges.length * 2);
+
+    drawnEdges.forEach((edge, i) => {
+        const src = edge[0], tgt = edge[1];
+        drawnEdgeMap[i*2] = src;
+        drawnEdgeMap[i*2+1] = tgt;
+        for (let a = 0; a < 3; a++) {
+            linePos[i*6+a] = positions[src*3+a];
+            linePos[i*6+3+a] = positions[tgt*3+a];
+        }
+        lineCol[i*6] = 0.12; lineCol[i*6+1] = 0.12; lineCol[i*6+2] = 0.2;
+        lineCol[i*6+3] = 0.12; lineCol[i*6+3+1] = 0.12; lineCol[i*6+3+2] = 0.2;
+    });
+
+    const lineGeom = new THREE.BufferGeometry();
+    lineGeom.setAttribute('position', new THREE.BufferAttribute(linePos, 3));
+    lineGeom.setAttribute('color', new THREE.BufferAttribute(lineCol, 3));
+    lineGeom.setAttribute('activity', new THREE.BufferAttribute(lineActivityArr, 1));
+    lineGeom.attributes.color.setUsage(THREE.DynamicDrawUsage);
+    lineGeom.attributes.activity.setUsage(THREE.DynamicDrawUsage);
+
+    const lineMat = new THREE.ShaderMaterial({
+        vertexShader: [
+            'attribute vec3 color;',
+            'attribute float activity;',
+            'varying vec3 vColor;',
+            'varying float vActivity;',
+            'void main() {',
+            '  vColor = color; vActivity = activity;',
+            '  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);',
+            '}'
+        ].join('\n'),
+        fragmentShader: [
+            'varying vec3 vColor;',
+            'varying float vActivity;',
+            'void main() {',
+            '  if (vActivity < 0.15) discard;',
+            '  float alpha = vActivity * 0.9;',
+            '  vec3 c = mix(vec3(0.0, 0.9, 1.0), vec3(0.7, 0.2, 1.0), vActivity);',
+            '  gl_FragColor = vec4(c, alpha);',
+            '}'
+        ].join('\n'),
+        transparent: true,
+        depthWrite: false,
+    });
+
+    linesMesh = new THREE.LineSegments(lineGeom, lineMat);
+    linesMesh.renderOrder = 1;
+    linesMesh.visible = false;  // 隱藏連接線，只顯示神經元點
+    scene.add(linesMesh);
+}
+
+function buildAdjacency() {
+    adjacency = new Array(nNeurons);
+    for (let i = 0; i < nNeurons; i++) adjacency[i] = [];
+    const stride = Math.max(1, Math.floor(edges.length / 50000));
+    for (let e = 0; e < edges.length; e += stride) {
+        const src = edges[e][0], tgt = edges[e][1], w = edges[e][2], sign = edges[e][3];
+        if (src < nNeurons && tgt < nNeurons) {
+            adjacency[src].push([tgt, w * 0.0008, sign]);
+        }
+    }
+}
+
+async function fetchStonkflyBrain() {
+    try {
+        const res = await fetch('/api/brain3d');
+        if (!res.ok) return;
+        stonkflyActivity = await res.json();
+    } catch(e) {}
+}
+
+function injectStonkflyStimulus() {
+    if (!stonkflyActivity) return 0;
+    const keyCells = stonkflyActivity.key_cells || {};
+    let totalStim = 0;
+
+    const kcSpikes = keyCells.KC?.spikes || 0;
+    if (kcSpikes > 0) {
+        const level = Math.min(1, kcSpikes / 5000);
+        for (let i = 0; i < nNeurons; i++) {
+            const r = neurons[i].role;
+            if (r === 'central' || r === 'inter' || (neurons[i].type && neurons[i].type.indexOf('MB') >= 0)) {
+                currents[i] += level * 0.25;
+                totalStim += level;
+            }
+        }
+    }
+
+    const dnSpikes = keyCells.DNp20?.spikes || 0;
+    if (dnSpikes > 0) {
+        const level = Math.min(1, dnSpikes / 100);
+        for (let i = 0; i < nNeurons; i++) {
+            const r = neurons[i].role;
+            if (r === 'descending' || r === 'motor' || neurons[i].type === 'MDN') {
+                currents[i] += level * 0.4;
+                totalStim += level;
+            }
+        }
+    }
+
+    const mbonSpikes = keyCells.MBON?.spikes || 0;
+    if (mbonSpikes > 0) {
+        const level = Math.min(1, mbonSpikes / 50);
+        for (let i = 0; i < nNeurons; i++) {
+            if (neurons[i].role === 'motor' || neurons[i].type === 'MDN') {
+                currents[i] += level * 0.35;
+                totalStim += level;
+            }
+        }
+    }
+
+    const retinaSpikes = keyCells.retina?.spikes || 0;
+    if (retinaSpikes > 0) {
+        const level = Math.min(1, retinaSpikes / 100);
+        for (let i = 0; i < nNeurons; i++) {
+            const r = neurons[i].role;
+            if (r === 'sensory' || r === 'optic' || r === 'visual_projection') {
+                currents[i] += level * 0.35;
+                totalStim += level;
+            }
+        }
+    }
+
+    const pplSpikes = keyCells.PPL101?.spikes || 0;
+    if (pplSpikes > 0) {
+        const level = Math.min(1, pplSpikes / 200);
+        for (let i = 0; i < nNeurons; i++) {
+            if (neurons[i].role === 'central' || neurons[i].role === 'inter') {
+                currents[i] += level * 0.2;
+                totalStim += level;
+            }
+        }
+    }
+
+    // Fly game activity - direct neural stimulation
+    if (flyGameActivity) {
+        // Sensory (mouse tracking) -> sensory/optic neurons
+        if (flyGameActivity.sensory > 0.1) {
+            for (let i = 0; i < nNeurons; i++) {
+                const r = neurons[i].role;
+                if (r === 'sensory' || r === 'optic') {
+                    currents[i] += flyGameActivity.sensory * 0.6;
+                    totalStim += flyGameActivity.sensory;
+                }
+            }
+        }
+        // Motor (flying) -> motor/descending neurons
+        if (flyGameActivity.motor > 0.1) {
+            for (let i = 0; i < nNeurons; i++) {
+                if (neurons[i].role === 'motor' || neurons[i].role === 'descending' || neurons[i].type === 'MDN') {
+                    currents[i] += flyGameActivity.motor * 0.7;
+                    totalStim += flyGameActivity.motor;
+                }
+            }
+        }
+        // Dopamine (eating reward) -> central brain
+        if (flyGameActivity.dopamine > 0.1) {
+            for (let i = 0; i < nNeurons; i++) {
+                if (neurons[i].role === 'central' || neurons[i].role === 'inter') {
+                    currents[i] += flyGameActivity.dopamine * 0.5;
+                    totalStim += flyGameActivity.dopamine;
+                }
+            }
+        }
+        // Octopamine (fear/startle) -> broad activation
+        if (flyGameActivity.octopamine > 0.1) {
+            for (let i = 0; i < nNeurons; i++) {
+                currents[i] += flyGameActivity.octopamine * 0.3;
+                totalStim += flyGameActivity.octopamine;
+            }
+        }
+        // Kenyon (learning) -> mushroom body
+        if (flyGameActivity.kenyon > 0.1) {
+            for (let i = 0; i < nNeurons; i++) {
+                if (neurons[i].role === 'central' || (neurons[i].type && neurons[i].type.indexOf('MB') >= 0)) {
+                    currents[i] += flyGameActivity.kenyon * 0.4;
+                    totalStim += flyGameActivity.kenyon;
+                }
+            }
+        }
+    }
+
+    return totalStim;
+}
+
+function simStepFn() {
+    for (let i = 0; i < nNeurons; i++) {
+        currents[i] = (Math.random() - 0.4) * NOISE_AMP;
+    }
+
+    const stonkStim = injectStonkflyStimulus();
+
+    if (simStep % 80 === 0) {
+        // Stimulate only a small random subset of sensory neurons
+        const stimCount = Math.floor(nNeurons * 0.02);
+        for (let s = 0; s < stimCount; s++) {
+            const i = Math.floor(Math.random() * nNeurons);
+            const r = neurons[i].role;
+            if (r === 'sensory' || r === 'optic') {
+                currents[i] += 0.5 + Math.random() * 0.3;
+            }
+        }
+    }
+
+    let firedCount = 0;
+    const firedSet = new Set();
+    for (let i = 0; i < nNeurons; i++) {
+        voltages[i] = voltages[i] * TAU_DECAY + currents[i] * DT;
+        if (voltages[i] >= V_THRESHOLD) {
+            voltages[i] = V_RESET;
+            spikeCount[i]++;
+            firedCount++;
+            firedSet.add(i);
+            const adj = adjacency[i];
+            for (let e = 0; e < adj.length; e++) {
+                const tgt = adj[e][0], w = adj[e][1], sign = adj[e][2];
+                currents[tgt] += sign > 0 ? w : -w * 0.6;
+            }
+        }
+    }
+
+    // 連接線已隱藏，跳過活動更新
+
+    let totalActivity = 0;
+    for (let i = 0; i < nNeurons; i++) {
+        nodeActivity[i] *= 0.90;
+        if (voltages[i] >= V_THRESHOLD * 0.6) {
+            nodeActivity[i] = Math.min(1, nodeActivity[i] + 0.35);
+        }
+        totalActivity += nodeActivity[i];
+    }
+
+    nodesMesh.geometry.attributes.activity.needsUpdate = true;
+    simStep++;
+
+    return { fired: firedCount, totalActivity: totalActivity / nNeurons, stonkStim };
+}
+
+function animate(time) {
+    requestAnimationFrame(animate);
+    const dt = time - lastTime;
+    lastTime = time;
+
+    if (time - lastFetch > 2000) {
+        lastFetch = time;
+        fetchStonkflyBrain();
+        checkFlyGameStorage();
+    }
+
+    const steps = Math.min(3, Math.max(1, Math.floor(dt / 16)));
+    let totalFired = 0, avgActivity = 0, totalStim = 0;
+    for (let i = 0; i < steps; i++) {
+        const r = simStepFn();
+        totalFired += r.fired;
+        avgActivity += r.totalActivity;
+        totalStim += r.stonkStim || 0;
+    }
+    avgActivity /= steps;
+
+    const connected = stonkflyActivity ? '✓ Stonkfly' : 'Stonkfly...';
+    const gameConnected = flyGameActivity ? '✓ 遊戲' : '遊戲...';
+    document.getElementById('stats').innerHTML = 
+        '步驟: ' + simStep + '<br>放電: ' + totalFired + '/步<br>平均活動: ' + (avgActivity*100).toFixed(1) + '%<br>刺激: ' + totalStim.toFixed(0) + '<br>' + connected + ' | ' + gameConnected;
+    document.getElementById('activity-fill').style.width = Math.min(100, avgActivity * 200) + '%';
+
+    controls.update();
+    renderer.render(scene, camera);
+}
+
+window.addEventListener('resize', () => {
+    const w = window.innerWidth, h = window.innerHeight;
+    camera.left = -w/h*1.5;
+    camera.right = w/h*1.5;
+    camera.top = 1.5;
+    camera.bottom = -1.5;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+});
+
+// Listen for fly game activity from parent window
+window.addEventListener('message', (event) => {
+    if (event.data && event.data.type === 'fly_game_activity') {
+        flyGameActivity = event.data;
+    }
+});
+
+// Also check localStorage for fly game activity
+function checkFlyGameStorage() {
+    try {
+        const data = localStorage.getItem('fly_game_activity');
+        if (data) {
+            const parsed = JSON.parse(data);
+            const age = Date.now() - (parsed.timestamp || 0);
+            if (age < 5000) {
+                flyGameActivity = parsed;
+            }
+        }
+    } catch(e) {}
+}
+
+// Main
+initScene();
+loadCircuit().then(() => {
+    initNeurons();
+    buildAdjacency();
+    document.getElementById('stats').textContent = '模擬運行中...';
+    animate(0);
+}).catch(err => {
+    document.getElementById('stats').textContent = '錯誤: ' + err.message;
+    console.error(err);
+});
+</script>
+</body>
+</html>

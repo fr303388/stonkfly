@@ -444,16 +444,65 @@ def fly_brain_3d_js():
     return send_file(p, mimetype="application/javascript")
 
 
-@app.route("/brain-atlas/")
-def brain_atlas_index():
-    p = Path(__file__).with_name("brain_atlas")
+@app.route("/brain-swat/")
+def brain_swat_index():
+    return send_file(Path(__file__).with_name("brain_swat.html"))
+
+
+@app.route("/fly-game/")
+def fly_game_index():
+    return send_file(Path(__file__).with_name("fly_game.html"))
+
+
+@app.route("/fonts/<path:filename>")
+def fonts(filename):
+    return send_from_directory(Path(__file__).with_name("fonts"), filename)
+
+
+@app.route("/swat/")
+def swat_index():
+    p = Path(__file__).with_name("swat_atlas")
     return send_from_directory(p, "index.html")
 
 
-@app.route("/brain-atlas/<path:filename>")
-def brain_atlas_static(filename):
-    p = Path(__file__).with_name("brain_atlas")
+@app.route("/swat/<path:filename>")
+def swat_static(filename):
+    p = Path(__file__).with_name("swat_atlas")
     return send_from_directory(p, filename)
+
+
+@app.route("/brain3d/")
+def brain3d_index():
+    return send_file(Path(__file__).with_name("brain3d_fastfly.html"))
+
+
+@app.route("/cerebra/")
+def cerebra_index():
+    p = Path(__file__).with_name("cerebra_atlas")
+    return send_from_directory(p, "index.html")
+
+
+@app.route("/cerebra/<path:filename>")
+def cerebra_static(filename):
+    p = Path(__file__).with_name("cerebra_atlas")
+    return send_from_directory(p, filename)
+
+
+@app.route("/data/<path:filename>")
+def cerebra_data(filename):
+    p = Path(__file__).with_name("cerebra_atlas")
+    return send_from_directory(p, f"data/{filename}")
+
+
+@app.route("/api/neuron/<neuron_id>")
+def cerebra_neuron_api(neuron_id):
+    # Cerebra neuron API - try to serve from data directory
+    p = Path(__file__).with_name("cerebra_atlas")
+    neuron_file = p / "data" / "neurons" / f"{neuron_id}.json"
+    if neuron_file.exists():
+        return send_file(neuron_file, mimetype="application/json")
+    # Return minimal neuron info if file not found
+    return jsonify({"id": neuron_id, "status": "not_cached"})
 
 
 @app.route("/api/advanced")

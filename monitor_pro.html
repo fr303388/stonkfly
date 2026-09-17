@@ -5,6 +5,19 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>STONKFLY // 果蠅神經交易監控</title>
 <style>
+@font-face {
+  font-family: 'ChironGoRoundTC';
+  src: url('/fonts/ChironGoRoundTC-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+}
+@font-face {
+  font-family: 'ChironGoRoundTC';
+  src: url('/fonts/ChironGoRoundTC-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+}
+* { font-family: 'ChironGoRoundTC', 'Courier New', monospace !important; }
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;700&display=swap');
   * { margin:0; padding:0; box-sizing:border-box; }
   :root {
@@ -374,6 +387,12 @@
   <div class="header-stat">⏱ <b id="simTimer">00:00:00</b></div>
   <div class="spacer"></div>
   <div class="header-stat" style="font-family:'JetBrains Mono',monospace;font-size:16px;color:var(--cyan);font-weight:700;" id="clock">--:--:--</div>
+  <button onclick="toggleFlyGame()" 
+          style="background:linear-gradient(135deg,#ff00ff,#00ffff);border:none;color:#000;
+                 padding:5px 14px;border-radius:14px;font-size:12px;font-weight:bold;
+                 cursor:pointer;margin-left:10px;box-shadow:0 0 12px #ff00ff;">
+    🎮 果蠅遊戲
+  </button>
 </div>
 
 <!-- 簡化帳戶資訊：左邊帳戶，右邊盈虧 -->
@@ -460,31 +479,15 @@
   <!-- 3D Brain (flex:3) -->
   <div class="panel brain-panel" id="brainPanel" style="flex:2;min-width:0;margin:0;display:flex;flex-direction:column;">
     <div class="panel-header">
-      <span class="brain-toggle" onclick="toggleBrain()"><span class="icon">🧠</span>果蠅大腦圖譜 (Fly Brain Atlas) <span id="brainArrow">▼</span></span>
+      <span class="brain-toggle" onclick="toggleBrain()"><span class="icon">🧠</span>果蠅大腦神經元模擬 (Swat電路) <span id="brainArrow">▼</span></span>
     <span style="font-size:11px;color:var(--dim)" id="brainInfo">載入中…</span>
     </div>
     <div class="brain-wrap" style="position:relative;width:100%;flex:1;min-height:200px;overflow:hidden;">
-      <iframe id="brainAtlas" src="/brain-atlas/" style="width:100%;height:100%;border:none;background:#000;" onload="document.getElementById('brainLoading').style.display='none';document.getElementById('brainInfo').textContent='80腦區 · 1,712神經元 · MaleCNS'"></iframe>
+      <iframe id="brainAtlas" src="/brain-swat/" style="width:100%;height:100%;border:none;background:#000;" onload="document.getElementById('brainLoading').style.display='none';document.getElementById('brainInfo').textContent='6,000神經元 · LIF模擬 · 實時放電'"></iframe>
       <canvas id="heatmap" style="position:absolute;top:0;left:0;width:100%;height:100%;display:none;pointer-events:none;"></canvas>
-      <div class="loading" id="brainLoading">載入果蠅大腦圖譜… (281MB 3D模型)</div>
+      <div class="loading" id="brainLoading">載入果蠅大腦神經元模擬…</div>
     </div>
-    <div class="brain-controls">
-    <span class="ctrl-label">着色:</span>
-      <button class="ctrl-btn active" onclick="setView('auto')">自動旋轉</button>
-      <button class="ctrl-btn" onclick="setView('front')">正面</button>
-    <button class="ctrl-btn" onclick="setView('side')">側面</button>
-    <button class="ctrl-btn" onclick="setView('top')">俯視</button>
-      <button class="ctrl-btn" onclick="toggleHeatmap()" id="heatmapBtn">熱力圖</button>
-    <span class="ctrl-label" style="margin-left:12px">標籤:</span>
-      <button class="ctrl-btn active" onclick="setColorMode('region')">腦區着色</button>
-    <button class="ctrl-btn" onclick="setColorMode('spike')">放電着色</button>
-    <span class="ctrl-label" style="margin-left:12px">標籤:</span>
-    <button class="ctrl-btn active" onclick="toggleLabel('kc')">肯楊細胞 KC</button>
-      <button class="ctrl-btn" onclick="toggleLabel('retina')">感光細胞</button>
-    <span class="ctrl-label" style="margin-left:12px">數據點:</span>
-    <button class="ctrl-btn active" onclick="setSlowmo(8)">慢動作 8x</button>
-    <button class="ctrl-btn" onclick="setSlowmo(1)">正常</button>
-    </div>
+
   </div>
 
   <!-- Eye chart (flex:2) -->
@@ -508,7 +511,7 @@
     <div class="panel-body" style="flex:1;min-height:0;display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden;">
       <div style="display:flex;gap:12px;align-items:center;margin-bottom:4px;">
         <div class="decision-big" id="decision" style="flex:1;text-align:center;">HOLD</div>
-        <div id="positionDir" style="flex:1;text-align:center;font-size:14px;font-weight:900;font-family:'JetBrains Mono',monospace;color:var(--dim);letter-spacing:2px;"></div>
+        <div id="positionDir" style="flex:1;text-align:center;font-size:22px;font-weight:900;font-family:'JetBrains Mono',monospace;color:var(--dim);letter-spacing:2px;"></div>
       </div>
       <div class="exec-status" id="execStatus">執行: --</div>
       <div class="hz-row">
@@ -549,13 +552,17 @@
       <!-- 纏論學習數據 -->
       <div style="background:rgba(168,85,247,0.06);border:1px solid rgba(168,85,247,0.2);border-radius:4px;padding:6px 8px;margin:4px 0;width:100%;box-sizing:border-box;">
         <div style="font-size:10px;color:var(--dim);margin-bottom:3px;">📚 纏論學習</div>
-        <div style="font-size:10px;line-height:1.7;">
-          <span style="color:var(--dim);">時間</span> <b id="chanStudyTime" style="color:var(--text);">--</b>
-          <span style="color:var(--dim);margin-left:10px;">理論</span> <b id="chanAvgLevel" style="color:var(--cyan);">--%</b>
-          <span style="color:var(--dim);margin-left:10px;">實戰</span> <b id="practicalAvg" style="color:var(--yellow);">--%</b>
-          <span style="color:var(--dim);margin-left:10px;">勝率</span> <b id="tradeWinRate" style="color:var(--green);">--%</b>
-          <span style="color:var(--dim);margin-left:10px;">買點</span> <b id="buyConf" style="color:var(--green);">--%</b>
-          <span style="color:var(--dim);margin-left:10px;">賣點</span> <b id="sellConf" style="color:var(--red);">--%</b>
+        <div style="font-size:10px;line-height:1.9;">
+          <div>
+            <span style="color:var(--dim);">時間</span> <b id="chanStudyTime" style="color:var(--text);">--</b>
+            <span style="color:var(--dim);margin-left:12px;">理論</span> <b id="chanAvgLevel" style="color:var(--cyan);">--%</b>
+            <span style="color:var(--dim);margin-left:12px;">實戰</span> <b id="practicalAvg" style="color:var(--yellow);">--%</b>
+          </div>
+          <div>
+            <span style="color:var(--dim);">勝率</span> <b id="tradeWinRate" style="color:var(--green);">--%</b>
+            <span style="color:var(--dim);margin-left:12px;">買點</span> <b id="buyConf" style="color:var(--green);">--%</b>
+            <span style="color:var(--dim);margin-left:12px;">賣點</span> <b id="sellConf" style="color:var(--red);">--%</b>
+          </div>
         </div>
       </div>
       <!-- Advanced Learning -->
@@ -1542,6 +1549,7 @@ async function fetchBrain3d() {
     const res = await fetch('/api/brain3d', { signal: controller.signal });
     clearTimeout(timeoutId);
     brain3dData = await res.json();
+    sendNeuralActivityToAtlas();
     heatmapActive = null;
     if (!points) initBrain();
     loadBrainPoints();
@@ -2360,7 +2368,7 @@ function updateUI() {
   const decEl = document.getElementById('decision');
   const flySide = neural.fly_side || side;
   const chanSide = neural.chan_side || 'HOLD';
-  decEl.innerHTML = `果蠅:<span style="color:${flySide==='BUY'?'#2ed573':flySide==='SELL'?'#ff4757':'#a4b0be'}">${flySide}</span> 纏論:<span style="color:${chanSide==='BUY'?'#2ed573':chanSide==='SELL'?'#ff4757':'#a4b0be'}">${chanSide}</span>`;
+  decEl.innerHTML = `<div>果蠅:<span style="color:${flySide==='BUY'?'#2ed573':flySide==='SELL'?'#ff4757':'#a4b0be'}">${flySide}</span></div><div>纏論:<span style="color:${chanSide==='BUY'?'#2ed573':chanSide==='SELL'?'#ff4757':'#a4b0be'}">${chanSide}</span></div>`;
   decEl.className = 'decision-big decision-' + side;
 
   // Update TP levels for chart display
@@ -3124,6 +3132,7 @@ setInterval(() => { try { fetchKlines(); } catch(e) {} }, 5000);
 setInterval(() => { try { fetch1mPrice(); } catch(e) {} }, 3000);
 setInterval(() => { try { fetchTokenInfo(); } catch(e) {} }, 10000);
 setInterval(() => { try { fetchBrain3d(); } catch(e) {} }, 30000);
+setInterval(() => { try { sendNeuralActivityToAtlas(); } catch(e) {} }, 2000);
 setInterval(() => { try { drawEyeChart(); } catch(e) {} }, 200);
 window.addEventListener('resize', () => {
   try {
@@ -3210,5 +3219,68 @@ fetchDepth();
 setInterval(updateClock, 1000);
 </script>
   <audio id="tradeSound" src="/trade_sound.mp3" preload="auto"></audio>
+
+<!-- 果蠅遊戲浮動視窗 -->
+<div id="flyGameWindow" style="display:none;position:fixed;top:80px;right:20px;width:620px;height:520px;
+     background:#0a0a12;border:2px solid #ff00ff;border-radius:12px;z-index:9999;
+     box-shadow:0 0 30px rgba(255,0,255,0.5);overflow:hidden;resize:both;min-width:400px;min-height:350px;">
+  <div id="flyGameTitle" style="background:linear-gradient(90deg,#ff00ff,#00ffff);padding:8px 12px;
+       cursor:move;display:flex;justify-content:space-between;align-items:center;user-select:none;">
+    <span style="color:#000;font-weight:bold;font-size:13px;">🎮 果蠅小遊戲</span>
+    <div>
+      <button onclick="minimizeFlyGame()" style="background:rgba(0,0,0,0.3);border:none;color:#000;
+              width:24px;height:24px;border-radius:50%;cursor:pointer;font-weight:bold;margin-right:4px;">_</button>
+      <button onclick="toggleFlyGame()" style="background:rgba(0,0,0,0.3);border:none;color:#000;
+              width:24px;height:24px;border-radius:50%;cursor:pointer;font-weight:bold;">✕</button>
+    </div>
+  </div>
+  <iframe id="flyGameFrame" src="/fly-game/" style="width:100%;height:calc(100% - 36px);border:none;display:block;"></iframe>
+</div>
+
+<script>
+// 浮動視窗控制
+let flyGameMinimized = false;
+function toggleFlyGame() {
+  const win = document.getElementById('flyGameWindow');
+  if (win.style.display === 'none' || win.style.display === '') {
+    win.style.display = 'block';
+    flyGameMinimized = false;
+    win.style.height = '520px';
+  } else {
+    win.style.display = 'none';
+  }
+}
+function minimizeFlyGame() {
+  const win = document.getElementById('flyGameWindow');
+  if (flyGameMinimized) {
+    win.style.height = '520px';
+    flyGameMinimized = false;
+  } else {
+    win.style.height = '36px';
+    flyGameMinimized = true;
+  }
+}
+// 拖動功能
+(function() {
+  const win = document.getElementById('flyGameWindow');
+  const title = document.getElementById('flyGameTitle');
+  let isDragging = false, offsetX = 0, offsetY = 0;
+  title.addEventListener('mousedown', (e) => {
+    if (e.target.tagName === 'BUTTON') return;
+    isDragging = true;
+    const rect = win.getBoundingClientRect();
+    offsetX = e.clientX - rect.left;
+    offsetY = e.clientY - rect.top;
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    win.style.left = (e.clientX - offsetX) + 'px';
+    win.style.top = (e.clientY - offsetY) + 'px';
+    win.style.right = 'auto';
+  });
+  document.addEventListener('mouseup', () => { isDragging = false; });
+})();
+</script>
 </body>
 </html>

@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>果蠅小遊戲</title>
+<style>
+@font-face {
+  font-family: 'ChironGoRoundTC';
+  src: url('/fonts/ChironGoRoundTC-Regular.ttf') format('truetype');
+  font-weight: 400;
+}
+@font-face {
+  font-family: 'ChironGoRoundTC';
+  src: url('/fonts/ChironGoRoundTC-Bold.ttf') format('truetype');
+  font-weight: 700;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; font-family: 'ChironGoRoundTC', 'Courier New', monospace; }
+body { 
+    background: #0a0a12; 
+    overflow: hidden; 
+    color: #00ffff;
+}
+#game { 
+    width: 100vw; 
+    height: 100vh; 
+    position: relative;
+    cursor: crosshair;
+}
+canvas { display: block; }
+#hud {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    font-size: 12px;
+    line-height: 1.8;
+    text-shadow: 0 0 5px #00ffff;
+    z-index: 10;
+}
+#hud .label { color: #888; }
+#hud .value { color: #00ffff; }
+#swatBtn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: rgba(0,210,211,0.15);
+    border: 1px solid #00d2d3;
+    color: #00d2d3;
+    padding: 6px 12px;
+    border-radius: 12px;
+    font-size: 11px;
+    cursor: pointer;
+    z-index: 10;
+    transition: all 0.2s;
+}
+#swatBtn.active {
+    background: linear-gradient(135deg, #ff0000, #990000);
+    color: #fff;
+    border-color: transparent;
+    box-shadow: 0 0 10px #ff0000;
+}
+#instructions {
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 11px;
+    color: #666;
+    text-align: center;
+    z-index: 10;
+}
+</style>
+</head>
+<body>
+<div id="game">
+    <canvas id="canvas"></canvas>
+    <div id="hud">
+        <div><span class="label">果蠅狀態:</span> <span class="value" id="state">閒逛</span></div>
+        <div><span class="label">興奮度:</span> <span class="value" id="excitement">0%</span></div>
+        <div><span class="label">飢餓度:</span> <span class="value" id="hunger">0%</span></div>
+        <div><span class="label">恐懼度:</span> <span class="value" id="fear">0%</span></div>
+        <div><span class="label">吃到食物:</span> <span class="value" id="foodCount">0</span></div>
+        <div><span class="label">神經活動:</span> <span class="value" id="neural">0</span></div>
+    </div>
+    <button id="swatBtn" onclick="toggleSwat()">🪰 蒼蠅拍</button>
+    <div id="instructions">移動滑鼠引導果蠅 · 點擊放置食物 · 切換蒼蠅拍模式嚇果蠅</div>
+</div>
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let W, H;
+
+function resize() {
+    W = canvas.width = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+let swatMode = false;
+
+const fly = {
+    x: W / 2, y: H / 2,
+    vx: 0, vy: 0,
+    angle: 0,
+    wingPhase: 0,
+    excitement: 0,
+    hunger: 0,
+    fear: 0,
+    foodEaten: 0,
+    state: '閒逛',
+    targetX: W / 2, targetY: H / 2,
+};
+
+let foods = [];
+let mouseX = W / 2, mouseY = H / 2;
+let mouseMoving = false;
+let lastMouseMove = 0;
+let swatEffect = null;
+
+let neuralActivity = {
+    sensory: 0, motor: 0, dopamine: 0, octopamine: 0, kenyon: 0,
+};
+
+canvas.addEventListener('mousemove', (e) => {
+    mouseX = e.clientX;
+    mouseY = e.clientY;
+    mouseMoving = true;
+    lastMouseMove = Date.now();
+});
+
+canvas.addEventListener('click', (e) => {
+    if (swatMode) {
+        const dx = e.clientX - fly.x;
+        const dy = e.clientY - fly.y;
+        const dist = Math.hypot(dx, dy);
+        
+        swatEffect = { x: e.clientX, y: e.clientY, time: Date.now(), angle: Math.random() * Math.PI, hit: dist < 60 };
+        
+        if (dist < 60) {
+            fly.fear = 100;
+            fly.excitement = Math.min(100, fly.excitement + 30);
+            neuralActivity.octopamine = 1.0;
+            neuralActivity.sensory = Math.min(1, neuralActivity.sensory + 0.8);
+            neuralActivity.motor = Math.min(1, neuralActivity.motor + 0.9);
+            
+            const angle = Math.atan2(fly.y - e.clientY, fly.x - e.clientX);
+            fly.vx = Math.cos(angle) * 15;
+            fly.vy = Math.sin(angle) * 15;
+            fly.targetX = fly.x + Math.cos(angle + (Math.random() - 0.5)) * 400;
+            fly.targetY = fly.y + Math.sin(angle + (Math.random() - 0.5)) * 400;
+            fly.state = '驚慌逃竄';
+        } else if (dist < 150) {
+            fly.fear = Math.min(100, fly.fear + 50);
+            neuralActivity.octopamine = Math.min(1, neuralActivity.octopamine + 0.6);
+            const angle = Math.atan2(fly.y - e.clientY, fly.x - e.clientX);
+            fly.vx += Math.cos(angle) * 5;
+            fly.vy += Math.sin(angle) * 5;
+            fly.state = '受驚';
+        } else {
+            fly.fear = Math.min(100, fly.fear + 15);
+            neuralActivity.octopamine = Math.min(1, neuralActivity.octopamine + 0.2);
+        }
+    } else {
+        foods.push({ x: e.clientX, y: e.clientY, size: 12, pulse: 0 });
+        fly.fear = Math.min(100, fly.fear + 10);
+        neuralActivity.octopamine = Math.min(1, neuralActivity.octopamine + 0.3);
+    }
+});
+
+function toggleSwat() {
+    swatMode = !swatMode;
+    const btn = document.getElementById('swatBtn');
+    btn.classList.toggle('active', swatMode);
+    document.getElementById('game').style.cursor = swatMode ? 'none' : 'crosshair';
+}
+
+function updateFly(dt) {
+    fly.excitement *= 0.98;
+    fly.hunger = Math.min(100, fly.hunger + 0.02);
+    fly.fear *= 0.95;
+    
+    neuralActivity.sensory *= 0.9;
+    neuralActivity.motor *= 0.95;
+    neuralActivity.dopamine *= 0.85;
+    neuralActivity.octopamine *= 0.8;
+    neuralActivity.kenyon *= 0.92;
+    
+    // AI behavior
+    if (swatMode) {
+        if (foods.length > 0 && fly.hunger > 10) {
+            let nearest = null, minDist = Infinity;
+            foods.forEach(f => {
+                const d = Math.hypot(f.x - fly.x, f.y - fly.y);
+                if (d < minDist) { minDist = d; nearest = f; }
+            });
+            if (nearest) {
+                fly.targetX = nearest.x;
+                fly.targetY = nearest.y;
+                fly.state = '覓食';
+            }
+        } else {
+            if (Math.random() < 0.02) {
+                fly.targetX = fly.x + (Math.random() - 0.5) * 300;
+                fly.targetY = fly.y + (Math.random() - 0.5) * 300;
+            }
+            fly.state = '閒逛';
+        }
+    } else if (Date.now() - lastMouseMove < 500) {
+        fly.targetX = mouseX;
+        fly.targetY = mouseY;
+        fly.excitement = Math.min(100, fly.excitement + 0.5);
+        neuralActivity.sensory = Math.min(1, neuralActivity.sensory + 0.1);
+        fly.state = '追蹤';
+    } else if (foods.length > 0) {
+        let nearest = null, minDist = Infinity;
+        foods.forEach(f => {
+            const d = Math.hypot(f.x - fly.x, f.y - fly.y);
+            if (d < minDist) { minDist = d; nearest = f; }
+        });
+        if (nearest && fly.hunger > 10) {
+            fly.targetX = nearest.x;
+            fly.targetY = nearest.y;
+            fly.state = '覓食';
+            neuralActivity.sensory = Math.min(1, neuralActivity.sensory + 0.05);
+        } else {
+            if (Math.random() < 0.02) {
+                fly.targetX = fly.x + (Math.random() - 0.5) * 300;
+                fly.targetY = fly.y + (Math.random() - 0.5) * 300;
+            }
+            fly.state = '閒逛';
+        }
+    } else {
+        if (Math.random() < 0.02) {
+            fly.targetX = fly.x + (Math.random() - 0.5) * 300;
+            fly.targetY = fly.y + (Math.random() - 0.5) * 300;
+        }
+        fly.state = '閒逛';
+    }
+    
+    if (fly.fear > 30) {
+        fly.targetX = fly.x + (Math.random() - 0.5) * 200;
+        fly.targetY = fly.y + (Math.random() - 0.5) * 200;
+        fly.state = '驚慌';
+    }
+    
+    // Move
+    const dx = fly.targetX - fly.x;
+    const dy = fly.targetY - fly.y;
+    const dist = Math.hypot(dx, dy);
+    
+    let speed = 2 + fly.excitement * 0.03 + fly.fear * 0.05;
+    
+    if (dist > 5) {
+        fly.vx += (dx / dist) * speed * 0.1;
+        fly.vy += (dy / dist) * speed * 0.1;
+        neuralActivity.motor = Math.min(1, neuralActivity.motor + 0.05);
+    }
+    
+    fly.vx *= 0.92;
+    fly.vy *= 0.92;
+    
+    fly.x += fly.vx;
+    fly.y += fly.vy;
+    
+    if (fly.x < 20) { fly.x = 20; fly.vx = Math.abs(fly.vx); }
+    if (fly.x > W - 20) { fly.x = W - 20; fly.vx = -Math.abs(fly.vx); }
+    if (fly.y < 20) { fly.y = 20; fly.vy = Math.abs(fly.vy); }
+    if (fly.y > H - 20) { fly.y = H - 20; fly.vy = -Math.abs(fly.vy); }
+    
+    if (Math.abs(fly.vx) > 0.1 || Math.abs(fly.vy) > 0.1) {
+        fly.angle = Math.atan2(fly.vy, fly.vx);
+    }
+    
+    fly.wingPhase += 0.5 + fly.excitement * 0.02;
+    
+    // Food collision
+    foods = foods.filter(f => {
+        f.pulse += 0.1;
+        const d = Math.hypot(f.x - fly.x, f.y - fly.y);
+        if (d < 20) {
+            fly.foodEaten++;
+            fly.hunger = Math.max(0, fly.hunger - 30);
+            fly.excitement = Math.min(100, fly.excitement + 15);
+            neuralActivity.dopamine = Math.min(1, neuralActivity.dopamine + 0.8);
+            neuralActivity.kenyon = Math.min(1, neuralActivity.kenyon + 0.3);
+            return false;
+        }
+        return true;
+    });
+    
+    // HUD
+    document.getElementById('state').textContent = fly.state;
+    document.getElementById('excitement').textContent = Math.round(fly.excitement) + '%';
+    document.getElementById('hunger').textContent = Math.round(fly.hunger) + '%';
+    document.getElementById('fear').textContent = Math.round(fly.fear) + '%';
+    document.getElementById('foodCount').textContent = fly.foodEaten;
+    
+    const totalNeural = (neuralActivity.sensory + neuralActivity.motor + 
+                        neuralActivity.dopamine + neuralActivity.octopamine + 
+                        neuralActivity.kenyon) * 20;
+    document.getElementById('neural').textContent = Math.round(totalNeural);
+}
+
+function drawFly() {
+    ctx.save();
+    ctx.translate(fly.x, fly.y);
+    ctx.rotate(fly.angle);
+    
+    const size = 8 + fly.excitement * 0.05;
+    
+    const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, size * 3);
+    const glowColor = fly.fear > 30 ? 'rgba(255, 0, 100,' : 'rgba(0, 255, 255,';
+    glow.addColorStop(0, glowColor + (0.3 + fly.excitement * 0.003) + ')');
+    glow.addColorStop(1, glowColor + '0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(-size * 3, -size * 3, size * 6, size * 6);
+    
+    const wingFlap = Math.sin(fly.wingPhase) * 0.5;
+    ctx.fillStyle = 'rgba(200, 220, 255, 0.4)';
+    ctx.beginPath();
+    ctx.ellipse(-2, -size * 0.8 - wingFlap * 3, size * 1.2, size * 0.4, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(-2, size * 0.8 + wingFlap * 3, size * 1.2, size * 0.4, 0.3, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.fillStyle = '#2a2a3a';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, size, size * 0.6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.fillStyle = '#3a3a4a';
+    ctx.beginPath();
+    ctx.arc(size * 0.7, 0, size * 0.4, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.fillStyle = fly.fear > 30 ? '#ff0066' : '#ff3366';
+    ctx.beginPath();
+    ctx.arc(size * 0.9, -size * 0.2, size * 0.15, 0, Math.PI * 2);
+    ctx.arc(size * 0.9, size * 0.2, size * 0.15, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.restore();
+}
+
+function drawFoods() {
+    foods.forEach(f => {
+        const pulse = Math.sin(f.pulse) * 0.3 + 1;
+        const s = f.size * pulse;
+        
+        const glow = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, s * 2);
+        glow.addColorStop(0, 'rgba(255, 150, 0, 0.5)');
+        glow.addColorStop(1, 'rgba(255, 100, 0, 0)');
+        ctx.fillStyle = glow;
+        ctx.fillRect(f.x - s * 2, f.y - s * 2, s * 4, s * 4);
+        
+        ctx.fillStyle = '#ff8800';
+        ctx.beginPath();
+        ctx.arc(f.x, f.y, s * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+    });
+}
+
+function drawSwatter() {
+    if (!swatMode) return;
+    ctx.save();
+    ctx.translate(mouseX, mouseY);
+    ctx.rotate(-0.3);
+    
+    ctx.strokeStyle = '#8B4513';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(30, 40);
+    ctx.stroke();
+    
+    ctx.strokeStyle = 'rgba(255, 100, 100, 0.8)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(0, 0, 25, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    ctx.strokeStyle = 'rgba(255, 100, 100, 0.4)';
+    ctx.lineWidth = 1;
+    for (let i = -20; i <= 20; i += 6) {
+        ctx.beginPath();
+        ctx.moveTo(i, -20);
+        ctx.lineTo(i, 20);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(-20, i);
+        ctx.lineTo(20, i);
+        ctx.stroke();
+    }
+    
+    ctx.restore();
+}
+
+function drawSwatEffect() {
+    if (!swatEffect) return;
+    const age = Date.now() - swatEffect.time;
+    if (age > 500) { swatEffect = null; return; }
+    const progress = age / 500;
+    const alpha = 1 - progress;
+    const size = 30 + progress * 50;
+    
+    ctx.save();
+    ctx.translate(swatEffect.x, swatEffect.y);
+    ctx.rotate(swatEffect.angle);
+    
+    ctx.strokeStyle = swatEffect.hit ? `rgba(255, 0, 0, ${alpha})` : `rgba(255, 200, 0, ${alpha})`;
+    ctx.lineWidth = 4 * (1 - progress);
+    ctx.beginPath();
+    ctx.arc(0, 0, size, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    if (swatEffect.hit) {
+        ctx.fillStyle = `rgba(255, 50, 50, ${alpha})`;
+        ctx.font = 'bold 24px ChironGoRoundTC';
+        ctx.textAlign = 'center';
+        ctx.fillText('啪!', 0, -size - 10);
+    }
+    
+    ctx.restore();
+}
+
+let trail = [];
+function updateTrail() {
+    trail.push({ x: fly.x, y: fly.y, life: 1 });
+    if (trail.length > 50) trail.shift();
+    trail.forEach(t => t.life *= 0.95);
+    trail = trail.filter(t => t.life > 0.05);
+}
+
+function drawTrail() {
+    for (let i = 1; i < trail.length; i++) {
+        ctx.strokeStyle = `rgba(0, 255, 255, ${trail[i].life * 0.3})`;
+        ctx.lineWidth = trail[i].life * 2;
+        ctx.beginPath();
+        ctx.moveTo(trail[i-1].x, trail[i-1].y);
+        ctx.lineTo(trail[i].x, trail[i].y);
+        ctx.stroke();
+    }
+}
+
+function sendNeuralActivity() {
+    const data = {
+        type: 'fly_game_activity',
+        sensory: neuralActivity.sensory,
+        motor: neuralActivity.motor,
+        dopamine: neuralActivity.dopamine,
+        octopamine: neuralActivity.octopamine,
+        kenyon: neuralActivity.kenyon,
+        excitement: fly.excitement / 100,
+        hunger: fly.hunger / 100,
+        fear: fly.fear / 100,
+        timestamp: Date.now(),
+    };
+    try { window.opener?.postMessage(data, '*'); } catch(e) {}
+    try { localStorage.setItem('fly_game_activity', JSON.stringify(data)); } catch(e) {}
+}
+
+let lastFoodSpawn = 0;
+function autoSpawnFood() {
+    if (foods.length < 5 && Math.random() < 0.3) {
+        foods.push({ x: 50 + Math.random() * (W - 100), y: 50 + Math.random() * (H - 100), size: 12, pulse: 0, auto: true });
+    }
+}
+
+let lastTime = 0;
+function loop(time) {
+    requestAnimationFrame(loop);
+    const dt = time - lastTime;
+    lastTime = time;
+    
+    ctx.fillStyle = 'rgba(10, 10, 18, 0.2)';
+    ctx.fillRect(0, 0, W, H);
+    
+    updateFly(dt);
+    updateTrail();
+    drawTrail();
+    drawFoods();
+    drawFly();
+    drawSwatEffect();
+    drawSwatter();
+    
+    if (time - lastFoodSpawn > 3000) {
+        lastFoodSpawn = time;
+        autoSpawnFood();
+    }
+    
+    if (Math.floor(time / 100) !== Math.floor((time - dt) / 100)) {
+        sendNeuralActivity();
+    }
+}
+
+loop(0);
+</script>
+</body>
+</html>
