@@ -1,0 +1,8 @@
+﻿{"mode": "paper", "network_execution": false}
+.\.venv\Scripts\python.exe : Stopped safely: RuntimeError. Inspect local state and reconcile before restarting.
+位於 線路:1 字元:140
++ ... lyContinue; .\.venv\Scripts\python.exe -m stonkfly.cli run --out runs ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Stopped safely:...ore restarting.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 

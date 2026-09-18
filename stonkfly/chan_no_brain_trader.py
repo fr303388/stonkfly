@@ -1,5 +1,5 @@
-"""纏論無腦交易模組 - 跟著15分K線買賣標記自動交易，使用獨立虛擬帳戶
-優化版：加入止損、RSI過濾、趨勢判斷、確認機制
+"""纏論無腦交易模組 - 跟著5分K線買賣標記自動交易，使用獨立虛擬帳戶
+全開模式：RSI門檻50、分型預判、冷卻5分鐘、無趨勢過濾
 """
 
 import json
@@ -19,11 +19,11 @@ class ChanNoBrainTrader:
         self.avg_entry = 0.0
         self.trades = []  # 交易記錄
         self.last_signal_time = 0  # 避免重複交易
-        self.cooldown_seconds = 900  # 交易冷卻時間改為15分鐘（一根K線）
+        self.cooldown_seconds = 300  # 交易冷卻時間5分鐘（全開模式）
         self.last_buy_signal_index = -1  # 最後處理的買入信號index
         self.last_sell_signal_index = -1  # 最後處理的賣出信號index
         self.tick_count = 0  # 啟動後的tick計數
-        self.startup_protection_ticks = 10  # 重開後前10個tick不交易，先觀察
+        self.startup_protection_ticks = 5  # 重開後前5個tick不交易，先觀察
         self.stop_loss_pct = 0.03  # 止損比例3%
         self.stop_loss_price = 0.0  # 止損價格
         self.take_profit_pct = 0.05  # 止盈比例5%
@@ -212,13 +212,11 @@ class ChanNoBrainTrader:
         latest_type = latest_fractal.get("type", "")
         latest_index = latest_fractal.get("index", -1)
 
-        # 確認分型已經收盤（index不是最後一根K線）
+        # 全開模式：分型預判，允許未確認分型（第2根K線就進場）
+        # 不再等待第3根K線確認，提前進場搶價格
+        _fractal_confirmed = True
         if len(klines) > 0 and latest_index >= len(klines) - 1:
-            if self.position > 0:
-                unrealized = (current_price - self.avg_entry) * self.position
-                return {"action": "HOLD", "reason": f"分型未確認，等待收盤，未實現{unrealized:+.2f}"}
-            else:
-                return {"action": "WAIT", "reason": "分型未確認，等待收盤"}
+            _fractal_confirmed = False  # 標記為預判分型
 
         # 無持倉且最新是底分型 → 買入（加入RSI和趨勢過濾）
         if self.position <= 0 and latest_type == "bottom":
@@ -227,12 +225,10 @@ class ChanNoBrainTrader:
                 return {"action": "WAIT", "reason": "已處理過此底分型，等待下一個"}
 
             # RSI過濾：只在RSI較低時買入（超賣區）
-            if rsi > 45:
-                return {"action": "WAIT", "reason": f"底分型但RSI{rsi:.0f}偏高，不買入（等待超賣）"}
+            if rsi > 50:
+                return {"action": "WAIT", "reason": f"底分型但RSI{rsi:.0f}偏高，不買入（全開模式門檻50）"}
 
-            # 趨勢過濾：下跌趨勢中不買入（避免接飛刀）
-            if trend == "downtrend":
-                return {"action": "WAIT", "reason": f"底分型但處於下跌趨勢，不買入（等待趨勢轉好）"}
+            # 全開模式：不做趨勢過濾，下跌趨勢也可以買入（接飛刀模式）
 
             buy_amount = min(self.cash * 0.95, self.cash)  # 用95%現金買入
             if buy_amount > 10 and current_price > 0:
@@ -261,7 +257,8 @@ class ChanNoBrainTrader:
                 }
                 self.trades.append(trade)
                 self.save()
-                return {"action": "BUY", "price": current_price, "qty": qty, "signal": f"底分型買入(RSI{rsi:.0f})", "stop_loss": self.stop_loss_price, "take_profit": self.take_profit_price}
+                _predict_tag = " [預判]" if not _fractal_confirmed else ""
+                return {"action": "BUY", "price": current_price, "qty": qty, "signal": f"底分型買入(RSI{rsi:.0f}){_predict_tag}", "stop_loss": self.stop_loss_price, "take_profit": self.take_profit_price}
 
         # 有持倉且最新是頂分型 → 賣出（加入RSI過濾）
         if self.position > 0 and latest_type == "top":
@@ -271,9 +268,9 @@ class ChanNoBrainTrader:
                 return {"action": "HOLD", "reason": f"已處理過此頂分型，等待下一個，未實現{unrealized:+.2f}"}
 
             # RSI過濾：只在RSI較高時賣出（超買區）
-            if rsi < 55:
+            if rsi < 50:
                 unrealized = (current_price - self.avg_entry) * self.position
-                return {"action": "HOLD", "reason": f"頂分型但RSI{rsi:.0f}偏低，不賣出（等待超買），未實現{unrealized:+.2f}"}
+                return {"action": "HOLD", "reason": f"頂分型但RSI{rsi:.0f}偏低，不賣出（全開模式門檻50），未實現{unrealized:+.2f}"}
 
             sell_qty = self.position
             sell_amount = sell_qty * current_price
@@ -299,7 +296,8 @@ class ChanNoBrainTrader:
             }
             self.trades.append(trade)
             self.save()
-            return {"action": "SELL", "price": current_price, "pnl": pnl, "signal": f"頂分型賣出(RSI{rsi:.0f})"}
+            _predict_tag = " [預判]" if not _fractal_confirmed else ""
+            return {"action": "SELL", "price": current_price, "pnl": pnl, "signal": f"頂分型賣出(RSI{rsi:.0f}){_predict_tag}"}
 
         # 最新分型與持倉狀態不匹配
         if self.position > 0:

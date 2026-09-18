@@ -412,17 +412,21 @@
       <span id="netValue" style="font-size:18px;font-weight:700;color:#aaa;font-family:'JetBrains Mono',monospace;">--</span>
     </div>
   </div>
-  <!-- 右邊：盈虧 -->
-  <div style="padding:14px 20px;display:flex;flex-direction:column;gap:6px;border-left:2px solid var(--border);">
+  <!-- 右邊：盈虧（分開果蠅/無腦/合計） -->
+  <div style="padding:14px 20px;display:flex;flex-direction:column;gap:4px;border-left:2px solid var(--border);min-width:280px;">
     <div style="display:flex;justify-content:space-between;align-items:baseline;">
-      <span style="font-size:11px;color:var(--dim);letter-spacing:1px;">📈 未實現盈虧</span>
-      <span id="unrealizedPnl" style="font-size:20px;font-weight:800;font-family:'JetBrains Mono',monospace;">--</span>
+      <span style="font-size:11px;color:var(--dim);letter-spacing:1px;">🦟 果蠅盈虧</span>
+      <span id="flyPnlLive" style="font-size:18px;font-weight:800;font-family:'JetBrains Mono',monospace;">--</span>
     </div>
     <div style="display:flex;justify-content:space-between;align-items:baseline;">
-      <span style="font-size:11px;color:var(--dim);letter-spacing:1px;">🏆 總盈虧</span>
-      <span id="pnlLive" style="font-size:28px;font-weight:900;font-family:'JetBrains Mono',monospace;text-shadow:0 0 12px currentColor;">--</span>
+      <span style="font-size:11px;color:var(--dim);letter-spacing:1px;">🤖 無腦盈虧</span>
+      <span id="nbPnlLive" style="font-size:18px;font-weight:800;font-family:'JetBrains Mono',monospace;">--</span>
     </div>
-    <div id="pnlPct" style="text-align:right;font-size:12px;color:var(--dim);font-family:'JetBrains Mono',monospace;">--</div>
+    <div style="display:flex;justify-content:space-between;align-items:baseline;border-top:1px solid var(--border);padding-top:4px;margin-top:2px;">
+      <span style="font-size:11px;color:var(--dim);letter-spacing:1px;">🏆 合計總盈虧</span>
+      <span id="pnlLive" style="font-size:24px;font-weight:900;font-family:'JetBrains Mono',monospace;text-shadow:0 0 12px currentColor;">--</span>
+    </div>
+    <div id="pnlPct" style="text-align:right;font-size:11px;color:var(--dim);font-family:'JetBrains Mono',monospace;">--</div>
   </div>
 </div>
 
@@ -601,8 +605,9 @@
   </div>
   <div style="position:relative;">
     <div id="czscSignal" style="position:absolute;top:8px;left:12px;z-index:10;font-size:11px;color:#a855f7;font-weight:700;font-family:'JetBrains Mono',monospace;text-shadow:0 0 8px rgba(168,85,247,0.5);pointer-events:none;">--</div>
-    <div id="tvChartContainer" style="width:100%;height:480px;background:#0a0d18;"></div>
-    <canvas id="pivotOverlay" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:5;"></canvas>
+    <div id="tvChartContainer" style="width:100%;height:480px;background:#0a0d18;position:relative;">
+      <canvas id="pivotOverlay" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:5;"></canvas>
+    </div>
   </div>
   <!-- Professional Chan Theory Info Bar -->
   <div id="chanInfoBar" style="display:flex;gap:16px;padding:8px 12px;background:linear-gradient(90deg,rgba(168,85,247,0.08),rgba(10,13,24,0.9));border-top:1px solid rgba(168,85,247,0.3);flex-wrap:wrap;font-size:11px;font-family:'JetBrains Mono',monospace;align-items:center;">
@@ -670,15 +675,19 @@
         <span id="pnlPosition" style="font-size:22px;font-weight:900;color:#00d2d3;font-family:'JetBrains Mono',monospace;">--</span>
       </div>
     </div>
-    <!-- 右邊：盈虧資訊 -->
-    <div style="display:flex;flex-direction:column;gap:8px;border-left:2px solid var(--border);padding-left:16px;">
+    <!-- 右邊：盈虧資訊（分開果蠅/無腦/合計） -->
+    <div style="display:flex;flex-direction:column;gap:6px;border-left:2px solid var(--border);padding-left:16px;">
       <div style="display:flex;justify-content:space-between;align-items:baseline;">
-        <span style="font-size:11px;color:var(--dim);letter-spacing:1px;">📊 未實現盈虧</span>
-        <span id="pnlUnrealized" style="font-size:20px;font-weight:800;font-family:'JetBrains Mono',monospace;">--</span>
+        <span style="font-size:11px;color:var(--dim);letter-spacing:1px;">🦟 果蠅盈虧</span>
+        <span id="pnlFlyTotal" style="font-size:18px;font-weight:800;font-family:'JetBrains Mono',monospace;">--</span>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:baseline;">
-        <span style="font-size:11px;color:var(--dim);letter-spacing:1px;">🏆 累計總盈虧</span>
-        <span id="pnlTotal" style="font-size:26px;font-weight:900;font-family:'JetBrains Mono',monospace;text-shadow:0 0 10px currentColor;">--</span>
+        <span style="font-size:11px;color:var(--dim);letter-spacing:1px;">🤖 無腦盈虧</span>
+        <span id="pnlNbTotal" style="font-size:18px;font-weight:800;font-family:'JetBrains Mono',monospace;">--</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;border-top:1px solid var(--border);padding-top:4px;">
+        <span style="font-size:11px;color:var(--dim);letter-spacing:1px;">🏆 合計總盈虧</span>
+        <span id="pnlTotal" style="font-size:22px;font-weight:900;font-family:'JetBrains Mono',monospace;text-shadow:0 0 10px currentColor;">--</span>
       </div>
     </div>
   </div>
@@ -700,7 +709,7 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
-<script src="fly_brain_3d.js"></script>
+<!-- fly_brain_3d.js removed - using Swat iframe instead -->
 
 <script>
 // ============ STATE ============
@@ -721,9 +730,13 @@ let showRetina = true;
 let slowmo = 8;
 let animTime = 0;
 
-// ============ 3D BRAIN (fly-brain style) ============
+// ============ 3D BRAIN (disabled - using Swat iframe) ============
 function initBrain() {
+  // Disabled: using Swat brain_swat.html iframe instead
+  console.log('[initBrain] disabled, using Swat iframe');
+  return;
   const canvas = document.getElementById('brain3d');
+  if (!canvas) return;
   flyBrain3d = new FlyBrain3D(canvas);
   flyBrain3d.generateNeurons(166700);
   flyBrain3d.start();
@@ -1549,9 +1562,8 @@ async function fetchBrain3d() {
     const res = await fetch('/api/brain3d', { signal: controller.signal });
     clearTimeout(timeoutId);
     brain3dData = await res.json();
-    sendNeuralActivityToAtlas();
     heatmapActive = null;
-    if (!points) initBrain();
+    // initBrain() disabled - using Swat iframe
     loadBrainPoints();
     const bi = document.getElementById('brainInfo');
     if (bi && brain3dData) bi.textContent = '';
@@ -1575,6 +1587,7 @@ async function fetchState() {
   try {
     const res = await fetch('/api/state');
     state = await res.json();
+    globalState = state; // Store globally for TP fallback
     events = state.events || [];
     updateTradeMarkersBar();
     updateWatchdog();
@@ -1587,6 +1600,10 @@ async function fetchState() {
     updateUI();
   } catch(e) { console.error('state error', e); }
 }
+
+// Fetch state periodically
+setInterval(fetchState, 3000);
+setTimeout(fetchState, 500);
 
 let currentTimeframe = '1m';
 
@@ -1681,6 +1698,7 @@ let tvCandleSeries = null;
 let tvVolumeSeries = null;
 let tpLines = [];
 let currentTP = {tp1: null, tp2: null, tp3: null, avg: null};
+let globalState = null; // Store latest state globally for TP fallback
 let chanStrokeSeries = []; // each stroke gets its own colored series
 
 // Neural synapse connections & firing impulses
@@ -1722,6 +1740,17 @@ function initTvChart() {
   try {
     tvChart.timeScale().subscribeVisibleLogicalRangeChange(() => { drawPivotOverlay(); });
   } catch(e) {}
+  
+  // Redraw TP lines immediately after chart creation
+  setTimeout(updateTPLines, 200);
+  setTimeout(drawPivotOverlay, 300);
+  
+  // Periodic redraw to ensure TP lines stay visible
+  if (!window._tpRedrawTimer) {
+    window._tpRedrawTimer = setInterval(() => {
+      if (currentTP._avg && tvCandleSeries) drawPivotOverlay();
+    }, 2000);
+  }
 }
 
 function loadTradingView(tf) {
@@ -1749,7 +1778,7 @@ function updateTvChart(data, czscStructures, state) {
     tvCandleSeries.setData(candles);
     czscKlineData = displayData;
     setTimeout(drawPivotOverlay, 50);
-    updateTPLines();
+    setTimeout(updateTPLines, 150);
 
     // 2. Volume
     try {
@@ -1763,38 +1792,11 @@ function updateTvChart(data, czscStructures, state) {
       }
     } catch(e) { console.warn('volume setData error', e); }
 
-    // 3. Chan stroke lines - only draw within visible time range
+    // 3. Chan stroke lines - DISABLED (user requested, too many illogical lines)
     try {
       chanStrokeSeries.forEach(s => { try { tvChart.removeSeries(s); } catch(e) {} });
       chanStrokeSeries = [];
-      if (czscStructures && czscStructures.strokes && czscStructures.strokes.length > 0 && displayData.length > 0) {
-        const minTime = Math.floor(displayData[0].t / 1000);
-        const maxTime = Math.floor(displayData[displayData.length-1].t / 1000);
-        czscStructures.strokes.forEach(s => {
-          // Use price-based time: find closest kline by price, or use index into original data
-          // Better: use start_index/end_index into original data, but check time range
-          const si = Math.max(0, Math.min(s.start_index || 0, data.length - 1));
-          const ei = Math.max(0, Math.min(s.end_index || 0, data.length - 1));
-          if (!data[si] || !data[ei]) return;
-          const t1 = Math.floor(data[si].t / 1000);
-          const t2 = Math.floor(data[ei].t / 1000);
-          // Only draw if at least partially within visible range
-          if (t2 < minTime || t1 > maxTime) return;
-          const p1 = parseFloat(s.start_price);
-          const p2 = parseFloat(s.end_price);
-          if (isNaN(p1) || isNaN(p2)) return;
-          const isUp = p2 >= p1;
-          const strokeS = tvChart.addLineSeries({
-            color: isUp ? '#2ed573' : '#ff4757',
-            lineWidth: 2.5,
-            priceLineVisible: false,
-            lastValueVisible: false,
-          });
-          strokeS.setData([{time: Math.max(t1, minTime), value: p1}, {time: Math.min(t2, maxTime), value: p2}]);
-          chanStrokeSeries.push(strokeS);
-        });
-      }
-    } catch(e) { console.warn('chan stroke error', e); }
+    } catch(e) { console.warn('chan stroke clear error', e); }
 
     // 4. Pivot info shown in signal text only (no custom drawing)
 
@@ -1926,7 +1928,9 @@ function updateTvChart(data, czscStructures, state) {
           }
         });
       }
-      // Trade markers
+      // Trade markers - only show within visible K-line range
+      const markerMinT = displayData.length > 0 ? Math.floor(displayData[0].t / 1000) : 0;
+      const markerMaxT = displayData.length > 0 ? Math.floor(displayData[displayData.length-1].t / 1000) : Infinity;
       const filled = (events || []).filter(ev => ev.execution && ev.execution.status === 'FILLED');
       filled.forEach(ev => {
         const side = ev.neural ? ev.neural.side : '';
@@ -1941,6 +1945,8 @@ function updateTvChart(data, czscStructures, state) {
         const tfSecMap = {'1m':60,'5m':300,'15m':900,'30m':1800,'1h':3600,'4h':14400,'8h':28800,'1d':86400};
         const tfSec = tfSecMap[currentTimeframe] || 900;
         const t = Math.floor(ev.wall_time / tfSec) * tfSec;
+        // Only show markers within visible range (plus 1 candle buffer)
+        if (t < markerMinT - tfSec || t > markerMaxT + tfSec) return;
         allMarkers.push({
           time: t,
           position: side === 'BUY' ? 'belowBar' : 'aboveBar',
@@ -2006,23 +2012,61 @@ function updateTvChart(data, czscStructures, state) {
 // Draw pivot filled rectangles on overlay canvas (like old Canvas version)
 function updateTPLines() {
   try {
-    // Remove old TP lines
+    // Remove old TP lines first
     tpLines.forEach(line => {
-      try { tvCandleSeries.removePriceLine(line); } catch(e) {}
+      try { if (tvCandleSeries) tvCandleSeries.removePriceLine(line); } catch(e) {}
     });
     tpLines = [];
-
-    if (!tvCandleSeries || !currentTP.avg) return;
-
-    const tpConfigs = [
-      { price: currentTP.tp1, color: '#2ed573', title: 'TP1 +0.1%', lineWidth: 1, lineStyle: 2 },
-      { price: currentTP.tp2, color: '#fed330', title: 'TP2 +0.2%', lineWidth: 1, lineStyle: 2 },
-      { price: currentTP.tp3, color: '#ff6b9d', title: 'TP3 +0.3%', lineWidth: 2, lineStyle: 1 },
-      { price: currentTP.avg, color: '#a55eea', title: '均價', lineWidth: 1, lineStyle: 0 },
+    
+    if (!tvCandleSeries) { console.log('[TP] no series'); return; }
+    
+    let avgPrice = parseFloat(currentTP.avg) || 0;
+    let tp1 = parseFloat(currentTP.tp1) || 0;
+    let tp2 = parseFloat(currentTP.tp2) || 0;
+    let tp3 = parseFloat(currentTP.tp3) || 0;
+    
+    // Fallback 1: check globalState.latest.neural directly
+    if (!avgPrice && globalState && globalState.latest && globalState.latest.neural) {
+      avgPrice = parseFloat(globalState.latest.neural.avg_entry) || 0;
+      tp1 = parseFloat(globalState.latest.neural.tp1) || 0;
+      tp2 = parseFloat(globalState.latest.neural.tp2) || 0;
+      tp3 = parseFloat(globalState.latest.neural.tp3) || 0;
+    }
+    
+    // Fallback 2: check last event's neural data
+    if (!avgPrice && globalState && globalState.events && globalState.events.length > 0) {
+      const lastEvent = globalState.events[globalState.events.length - 1];
+      if (lastEvent && lastEvent.neural) {
+        avgPrice = parseFloat(lastEvent.neural.avg_entry) || 0;
+        tp1 = parseFloat(lastEvent.neural.tp1) || 0;
+        tp2 = parseFloat(lastEvent.neural.tp2) || 0;
+        tp3 = parseFloat(lastEvent.neural.tp3) || 0;
+      }
+    }
+    
+    // Fallback 3: check observation chan_auto entry_price
+    if (!avgPrice && globalState && globalState.meta && globalState.meta.observation) {
+      const obs = globalState.meta.observation;
+      if (obs.chan_auto && obs.chan_auto.entry_price) {
+        avgPrice = parseFloat(obs.chan_auto.entry_price) || 0;
+      }
+    }
+    
+    if (!avgPrice || avgPrice <= 0) { console.log('[TP] no avg price'); return; }
+    
+    const finalTp1 = tp1 || avgPrice * 1.005;
+    const finalTp2 = tp2 || avgPrice * 1.010;
+    const finalTp3 = tp3 || avgPrice * 1.015;
+    
+    const configs = [
+      { price: finalTp1, color: '#2ed573', title: 'TP1 +0.5%', lineWidth: 1, lineStyle: 2 },
+      { price: finalTp2, color: '#fed330', title: 'TP2 +1.0%', lineWidth: 1, lineStyle: 2 },
+      { price: finalTp3, color: '#ff6b9d', title: 'TP3 +1.5%', lineWidth: 2, lineStyle: 0 },
+      { price: avgPrice, color: '#a55eea', title: '均價', lineWidth: 1, lineStyle: 0 },
     ];
-
-    tpConfigs.forEach(cfg => {
-      if (cfg.price && cfg.price > 0) {
+    
+    configs.forEach(cfg => {
+      if (cfg.price > 0) {
         const line = tvCandleSeries.createPriceLine({
           price: cfg.price,
           color: cfg.color,
@@ -2034,13 +2078,19 @@ function updateTPLines() {
         tpLines.push(line);
       }
     });
-  } catch(e) { console.warn('TP lines error', e); }
+    
+    currentTP._avg = avgPrice;
+    currentTP._tp1 = finalTp1;
+    currentTP._tp2 = finalTp2;
+    currentTP._tp3 = finalTp3;
+    console.log('[TP] created 4 price lines at avg:', avgPrice);
+  } catch(e) { console.error('[TP] error', e); }
 }
 
 function drawPivotOverlay() {
   try {
     const canvas = document.getElementById('pivotOverlay');
-    if (!canvas || !tvChart || !tvCandleSeries || !czscStructures || !czscStructures.pivots || !czscStructures.pivots.length) {
+    if (!canvas || !tvChart || !tvCandleSeries) {
       if (canvas) { const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, canvas.width, canvas.height); }
       return;
     }
@@ -2059,8 +2109,8 @@ function drawPivotOverlay() {
     const offsetX = chartRect.left - overlayRect.left;
     const offsetY = chartRect.top - overlayRect.top;
 
+    if (czscStructures && czscStructures.pivots && klines && klines.length) {
     czscStructures.pivots.forEach(zs => {
-      if (!klines || !klines.length) return;
       // Use original data indices to get timestamps, then convert to coordinates
       const x1 = Math.max(0, Math.min(zs.start_index || 0, klines.length - 1));
       const x2 = Math.max(0, Math.min(zs.end_index || 0, klines.length - 1));
@@ -2098,6 +2148,8 @@ function drawPivotOverlay() {
       ctx.lineWidth = 2;
       ctx.strokeRect(rx, ry, rw, rh);
     });
+    }
+
   } catch(e) { console.warn('pivot overlay error', e); }
 }
 
@@ -2219,9 +2271,10 @@ function updatePnL(meta, simEquity, initial) {
   const nbCash = parseFloat(nbState.cash || 0);
   const nbPos = parseFloat(nbState.position || 0);
   const nbEquityFromState = parseFloat(nbState.equity || 0);
-  // 只有當no_brain_state有數據時才計算，否則顯示0（避免-10000）
-  const nbEquity = (nbCash > 0 || nbPos > 0 || nbEquityFromState > 0) ? (nbEquityFromState > 0 ? nbEquityFromState : nbCash + nbPos * markPrice) : 0;
-  const nbTotalPnl = (nbCash > 0 || nbPos > 0 || nbEquityFromState > 0) ? (nbEquity - nbInitial) : 0;
+  // 無腦交易權益 = 現金 + 持倉市值（使用當前市價，不用均價）
+  const nbHasData = (nbCash > 0 || nbPos > 0 || nbEquityFromState > 0);
+  const nbEquity = nbHasData ? (nbCash + nbPos * markPrice) : 0;
+  const nbTotalPnl = nbHasData ? (nbEquity - nbInitial) : 0;
   // 合計總盈虧 = 果蠅 + 無腦
   const totalPnl = flyTotalPnl + nbTotalPnl;
   // 未實現盈虧：直接計算果蠅+無腦的持倉浮動盈虧
@@ -2263,12 +2316,12 @@ function updatePnL(meta, simEquity, initial) {
   const posValEl = document.getElementById('posValue');
   if (posValEl) posValEl.textContent = posValue > 0 ? '$' + posValue.toFixed(4) : '$0.00';
 
-  // Total P&L highlight
+  // Total P&L highlight (合計)
   const pnlBox = document.getElementById('pnlBox');
   const pnlLive = document.getElementById('pnlLive');
   const pnlPct = document.getElementById('pnlPct');
   if (pnlLive) {
-    pnlLive.textContent = (totalPnl >= 0 ? '+' : '') + '$' + totalPnl.toFixed(4);
+    pnlLive.textContent = (totalPnl >= 0 ? '+' : '') + '$' + totalPnl.toFixed(2);
     pnlLive.style.color = totalPnl >= 0 ? 'var(--green)' : 'var(--red)';
   }
   if (pnlPct) {
@@ -2280,16 +2333,18 @@ function updatePnL(meta, simEquity, initial) {
     pnlBox.classList.add(totalPnl >= 0 ? 'pnl-profit' : 'pnl-loss');
   }
 
-  // Unrealized P&L
-  const unrlEl = document.getElementById('unrealizedPnl');
-  if (unrlEl) {
-    if (btcAmount > 0) {
-      unrlEl.textContent = (unrealized >= 0 ? '+' : '') + '$' + unrealized.toFixed(4);
-      unrlEl.style.color = unrealized >= 0 ? 'var(--green)' : 'var(--red)';
-    } else {
-      unrlEl.textContent = '$0.00';
-      unrlEl.style.color = 'var(--dim)';
-    }
+  // 果蠅盈虧（已實現+未實現）
+  const flyPnlEl = document.getElementById('flyPnlLive');
+  if (flyPnlEl) {
+    flyPnlEl.textContent = (flyTotalPnl >= 0 ? '+' : '') + '$' + flyTotalPnl.toFixed(2);
+    flyPnlEl.style.color = flyTotalPnl >= 0 ? 'var(--green)' : 'var(--red)';
+  }
+
+  // 無腦盈虧（已實現+未實現）
+  const nbPnlEl = document.getElementById('nbPnlLive');
+  if (nbPnlEl) {
+    nbPnlEl.textContent = (nbTotalPnl >= 0 ? '+' : '') + '$' + nbTotalPnl.toFixed(2);
+    nbPnlEl.style.color = nbTotalPnl >= 0 ? 'var(--green)' : 'var(--red)';
   }
 
   // Take-profit progress (3% threshold)
@@ -2322,6 +2377,7 @@ function updatePnL(meta, simEquity, initial) {
 function updateUI() {
   try {
   if (!state) return;
+  globalState = state; // Store globally for TP fallback
   const latest = state.latest || {};
   const meta = state.meta || {};
   const neural = latest.neural || {};
@@ -2378,7 +2434,9 @@ function updateUI() {
     tp3: neural.tp3 || null,
     avg: neural.avg_entry || null,
   };
-  if (tvCandleSeries) updateTPLines();
+  // updateTPLines stores values, drawPivotOverlay renders them
+  updateTPLines();
+  setTimeout(drawPivotOverlay, 150);
 
   // Direction based on CZSC bull/bear ratio
   const posDir = document.getElementById('positionDir');
@@ -2576,82 +2634,72 @@ function updatePnlSummary(tab) {
   if (!state) return;
   const cashEl = document.getElementById('pnlCash');
   const posEl = document.getElementById('pnlPosition');
-  const unrlEl = document.getElementById('pnlUnrealized');
+  const flyTotalEl = document.getElementById('pnlFlyTotal');
+  const nbTotalEl = document.getElementById('pnlNbTotal');
   const totalEl = document.getElementById('pnlTotal');
   if (!cashEl) return;
-  
-  // 獲取即時價格（優先使用quote.bid，確保與上面帳戶區域同步）
+
   const latest = state.latest || {};
   const markPrice = parseFloat(latest.quote?.bid || latest.quote?.price || 0);
-  
+
+  // === 計算果蠅盈虧 ===
+  const meta = state.meta || {};
+  const flyCash = parseFloat(meta.cash || 0);
+  const flyPositions = meta.positions || {};
+  const flyBtc = parseFloat(flyPositions['BTC-USDT'] || 0);
+  let flyAvg = parseFloat(meta.avg_entry_price || latest.neural?.avg_entry || 0);
+  if (flyAvg <= 0 && flyBtc > 0) {
+    const filled = (state.events || []).filter(ev => ev.execution && ev.execution.status === 'FILLED');
+    let tc = 0, tq = 0;
+    filled.forEach(ev => {
+      const ex = ev.execution || {};
+      const b = parseFloat(ex.base || 0);
+      const q = parseFloat(ex.quote || 0);
+      const side = ev.neural ? ev.neural.side : '';
+      if (side === 'BUY' && b > 0) { tc += q; tq += b; }
+      else if (side === 'SELL' && b > 0) {
+        const ac = tq > 0 ? tc / tq : 0;
+        tc -= ac * Math.min(b, tq);
+        tq = Math.max(0, tq - b);
+      }
+    });
+    flyAvg = tq > 0 ? tc / tq : 0;
+  }
+  const flyUnrealized = flyBtc > 0 && flyAvg > 0 && markPrice > 0 ? (markPrice - flyAvg) * flyBtc : 0;
+  const flyTotal = (typeof totalRealizedPnl === 'number' ? totalRealizedPnl : 0) + flyUnrealized;
+
+  // === 計算無腦盈虧 ===
+  const nbState = (state && state.no_brain_state) ? state.no_brain_state : {};
+  const nbCash = parseFloat(nbState.cash || 0);
+  const nbBtc = parseFloat(nbState.position || 0);
+  const nbAvg = parseFloat(nbState.avg_entry || 0);
+  const nbRealized = parseFloat(nbState.realized_pnl || 0);
+  const nbUnrealized = nbBtc > 0 && nbAvg > 0 && markPrice > 0 ? (markPrice - nbAvg) * nbBtc : 0;
+  const nbTotal = nbRealized + nbUnrealized;
+
+  // === 顯示 ===
   if (tab === 'fly') {
-    // 果蠅交易盈虧 - 與上面帳戶區域使用相同計算方式
-    const meta = state.meta || {};
-    const cash = parseFloat(meta.cash || 0);
-    const positions = meta.positions || {};
-    const btcAmount = parseFloat(positions['BTC-USDT'] || 0);
-    // 從多個來源獲取均價，優先級：meta.avg_entry_price > neural.avg_entry > 從交易紀錄計算
-    let avgPrice = parseFloat(meta.avg_entry_price || latest.neural?.avg_entry || 0);
-    if (avgPrice <= 0 && btcAmount > 0) {
-      // 從交易紀錄計算加權平均均價
-      const filledTrades = (state.events || []).filter(ev => ev.execution && ev.execution.status === 'FILLED');
-      let totalCost = 0, totalQty = 0;
-      filledTrades.forEach(ev => {
-        const ex = ev.execution || {};
-        const base = parseFloat(ex.base || 0);
-        const quote = parseFloat(ex.quote || 0);
-        const side = ev.neural ? ev.neural.side : '';
-        if (side === 'BUY' && base > 0) {
-          totalCost += quote;
-          totalQty += base;
-        } else if (side === 'SELL' && base > 0) {
-          // 賣出時減少持倉成本（先進先出簡化處理）
-          const avgCost = totalQty > 0 ? totalCost / totalQty : 0;
-          totalCost -= avgCost * Math.min(base, totalQty);
-          totalQty = Math.max(0, totalQty - base);
-        }
-      });
-      avgPrice = totalQty > 0 ? totalCost / totalQty : 0;
-    }
-    const unrealized = btcAmount > 0 && avgPrice > 0 && markPrice > 0 ? (markPrice - avgPrice) * btcAmount : 0;
-    // 累計總盈虧與上方保持一致：果蠅+無腦交易合計
-    const nbState = (state && state.no_brain_state) ? state.no_brain_state : {};
-    const nbPosition = parseFloat(nbState.position || 0) || 0;
-    const nbAvgEntry = parseFloat(nbState.avg_entry || 0) || 0;
-    const nbRealized = parseFloat(nbState.realized_pnl || 0) || 0;
-    const nbUnrealized = nbPosition > 0 && nbAvgEntry > 0 && markPrice > 0 ? (markPrice - nbAvgEntry) * nbPosition : 0;
-    const total = totalRealizedPnl + unrealized;
-    cashEl.textContent = '$' + cash.toLocaleString('en-US', {maximumFractionDigits: 2});
-    posEl.textContent = btcAmount.toFixed(4) + ' BTC';
-    unrlEl.textContent = (unrealized >= 0 ? '+' : '') + '$' + unrealized.toFixed(2);
-    unrlEl.style.color = unrealized >= 0 ? '#39ff14' : '#ff3131';
-    totalEl.textContent = (total >= 0 ? '+' : '') + '$' + total.toFixed(2);
-    totalEl.style.color = total >= 0 ? '#39ff14' : '#ff3131';
-    totalEl.style.fontSize = '26px';
+    cashEl.textContent = '$' + flyCash.toLocaleString('en-US', {maximumFractionDigits: 2});
+    posEl.textContent = flyBtc.toFixed(4) + ' BTC';
   } else {
-    // 無腦交易盈虧
-    const nb = latest.no_brain || {};
-    const cash = parseFloat(nb.cash || 0);
-    const position = parseFloat(nb.position || 0);
-    const avgEntry = parseFloat(nb.avg_entry || 0);
-    // 優先使用後端計算的未實現盈虧，確保與no_brain_state.json一致
-    const nbUnrealized = parseFloat(nb.unrealized_pnl);
-    const unrealized = !isNaN(nbUnrealized) ? nbUnrealized : (position > 0 && avgEntry > 0 && markPrice > 0 ? (markPrice - avgEntry) * position : 0);
-    const realized = parseFloat(nb.realized_pnl || 0);
-    // 累計總盈虧與上方保持一致：果蠅+無腦交易合計
-    const meta = state.meta || {};
-    const flyPositions = meta.positions || {};
-    const flyBtcAmount = parseFloat(flyPositions['BTC-USDT'] || 0);
-    let flyAvgPrice = parseFloat(meta.avg_entry_price || latest.neural?.avg_entry || 0);
-    const flyUnrealized = flyBtcAmount > 0 && flyAvgPrice > 0 && markPrice > 0 ? (markPrice - flyAvgPrice) * flyBtcAmount : 0;
-    const total = realized + unrealized;
-    cashEl.textContent = '$' + cash.toLocaleString('en-US', {maximumFractionDigits: 2});
-    posEl.textContent = position.toFixed(6) + ' BTC';
-    unrlEl.textContent = (unrealized >= 0 ? '+' : '') + '$' + unrealized.toFixed(2);
-    unrlEl.style.color = unrealized >= 0 ? '#39ff14' : '#ff3131';
-    totalEl.textContent = (total >= 0 ? '+' : '') + '$' + total.toFixed(2);
-    totalEl.style.color = total >= 0 ? '#39ff14' : '#ff3131';
-    totalEl.style.fontSize = '26px';
+    cashEl.textContent = '$' + nbCash.toLocaleString('en-US', {maximumFractionDigits: 2});
+    posEl.textContent = nbBtc.toFixed(6) + ' BTC';
+  }
+  // 果蠅盈虧
+  if (flyTotalEl) {
+    flyTotalEl.textContent = (flyTotal >= 0 ? '+' : '') + '$' + flyTotal.toFixed(2);
+    flyTotalEl.style.color = flyTotal >= 0 ? '#39ff14' : '#ff3131';
+  }
+  // 無腦盈虧
+  if (nbTotalEl) {
+    nbTotalEl.textContent = (nbTotal >= 0 ? '+' : '') + '$' + nbTotal.toFixed(2);
+    nbTotalEl.style.color = nbTotal >= 0 ? '#39ff14' : '#ff3131';
+  }
+  // 合計
+  const combined = flyTotal + nbTotal;
+  if (totalEl) {
+    totalEl.textContent = (combined >= 0 ? '+' : '') + '$' + combined.toFixed(2);
+    totalEl.style.color = combined >= 0 ? '#39ff14' : '#ff3131';
   }
 }
 
@@ -3104,7 +3152,7 @@ function updateClock() {
 }
 
 // ============ INIT ============
-try { initBrain(); } catch(e) { console.error('initBrain error', e); }
+// initBrain() disabled - using Swat iframe
 try { animateBrain(); } catch(e) { console.error('animateBrain error', e); }
 try { fetchBrain3d(); } catch(e) { console.error('fetchBrain3d error', e); }
 try { fetchState(); } catch(e) { console.error('fetchState error', e); }
@@ -3132,7 +3180,7 @@ setInterval(() => { try { fetchKlines(); } catch(e) {} }, 5000);
 setInterval(() => { try { fetch1mPrice(); } catch(e) {} }, 3000);
 setInterval(() => { try { fetchTokenInfo(); } catch(e) {} }, 10000);
 setInterval(() => { try { fetchBrain3d(); } catch(e) {} }, 30000);
-setInterval(() => { try { sendNeuralActivityToAtlas(); } catch(e) {} }, 2000);
+// sendNeuralActivityToAtlas removed - atlas integration deprecated
 setInterval(() => { try { drawEyeChart(); } catch(e) {} }, 200);
 window.addEventListener('resize', () => {
   try {

@@ -12,6 +12,7 @@ import traceback
 from pathlib import Path
 
 import numpy as np
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 
 from .config import D, Settings
 
@@ -345,17 +346,22 @@ def main():
         last_buy_time = 0.0
         MIN_HOLD_SECONDS = 180
         COOLDOWN_SECONDS = 40
+        # 全局持久化神經模擬 executor（不使用 with，避免 shutdown 阻塞）
+        _neural_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="neural-sim")
         while not a.steps or count < a.steps:
             started = time.monotonic()
             # Release unused memory before each tick - prevents gradual slowdown
             gc.collect()
-            # Step-based sleep: every 25 steps, force sleep & reorganize
+            # Step-based sleep: every 25 steps, sleep & reorganize IN-PROCESS (no exit)
             if count >= 25:
-                print(f"[睡眠] 已執行 {count} 步，強制睡眠整理大腦", file=sys.stderr, flush=True)
+                print(f"[睡眠] 已執行 {count} 步，睡眠整理大腦（進程內完成，不退出）", file=sys.stderr, flush=True)
                 # Save brain checkpoint before sleep
-                _sleep_slot = ledger.get("tick") % 2
-                _sleep_ckpt = out / f"brain-{_sleep_slot}.npz"
-                controller.save(_sleep_ckpt)
+                try:
+                    _sleep_slot = ledger.get("tick") % 2
+                    _sleep_ckpt = out / f"brain-{_sleep_slot}.npz"
+                    controller.save(_sleep_ckpt)
+                except Exception as _save_err:
+                    print(f"[睡眠] 檢查點保存跳過: {_save_err}", file=sys.stderr, flush=True)
                 try:
                     (out / "SLEEP").write_text(json.dumps({
                         "tick": ledger.get("tick"),
@@ -372,7 +378,10 @@ def main():
                         print("[睡眠] 大腦記憶鞏固完成，弱化突觸已修剪", file=sys.stderr, flush=True)
                 except Exception as _e:
                     print(f"[睡眠] 記憶鞏固跳過: {_e}", file=sys.stderr, flush=True)
-                sys.exit(42)
+                # 重置計數器，繼續循環（不退出進程）
+                count = 0
+                gc.collect()
+                print("[睡眠] 整理完成，繼續運行", file=sys.stderr, flush=True)
             stop_requested = (out / "STOP").exists()
             halted = ledger.get("halted")
             if stop_requested or halted:
@@ -453,8 +462,62 @@ def main():
                 price_percentile = max(0, min(100, (float(q.bid) - _p_low) / _p_range * 100))
             else:
                 price_percentile = 50.0
+
+            # === 震盪盤識別：最近20根K線波動率 < 1% 視為震盪盤 ===
+            _is_ranging = False
+            try:
+                _recent_prices = np.asarray(market.history[product][-20:], dtype=float)
+                if len(_recent_prices) >= 10:
+                    _h = float(np.max(_recent_prices))
+                    _l = float(np.min(_recent_prices))
+                    _avg = float(np.mean(_recent_prices))
+                    _volatility = (_h - _l) / _avg * 100 if _avg > 0 else 100
+                    _is_ranging = _volatility < 1.0
+            except Exception:
+                pass
             frame = market_frame(product, market.history[product], q.bid, q.ask, macd=macd, strategy=strategy.to_dict(), czsc=czsc_obs)
-            neural = controller.observe(frame, kind, czsc=czsc_analysis)
+            # 神經模擬超時機制：超過60秒自動跳過，避免無限循環卡住整個交易循環
+            # 使用全局持久化 executor，不使用 with 語句（避免 shutdown(wait=True) 阻塞）
+            _neural_timeout = 60  # 秒
+            _neural_start = time.time()
+            try:
+                _neural_future = _neural_executor.submit(controller.observe, frame, kind, czsc=czsc_analysis)
+                neural = _neural_future.result(timeout=_neural_timeout)
+            except FuturesTimeoutError:
+                _neural_elapsed = time.time() - _neural_start
+                print(f"[超時] 神經模擬超過{_neural_timeout}s（已用{_neural_elapsed:.1f}s），跳過本次模擬，使用HOLD默認值", file=sys.stderr, flush=True)
+                # 取消未完成的 future（儘管無法強制中斷執行緒，但可以阻止回調）
+                try:
+                    _neural_future.cancel()
+                except Exception:
+                    pass
+                neural = {
+                    "side": "HOLD",
+                    "left_hz": 0.0,
+                    "right_hz": 0.0,
+                    "difference_hz": 0.0,
+                    "gate_spikes": 0,
+                    "kc_spikes": 0,
+                    "total_spikes": 0,
+                    "compute_seconds": _neural_elapsed,
+                    "decision_note": f"神經模擬超時{_neural_elapsed:.0f}s，跳過",
+                    "rsi": 50,
+                    "price_percentile": 50,
+                    "avg_entry": None,
+                    "position": 0,
+                    "cash": 0,
+                    "pnl": 0,
+                    "unrealized_pnl": 0,
+                }
+            except Exception as _neural_err:
+                print(f"[錯誤] 神經模擬異常: {_neural_err}", file=sys.stderr, flush=True)
+                neural = {
+                    "side": "HOLD", "left_hz": 0.0, "right_hz": 0.0, "difference_hz": 0.0,
+                    "gate_spikes": 0, "kc_spikes": 0, "total_spikes": 0,
+                    "compute_seconds": 0, "decision_note": f"神經模擬錯誤: {str(_neural_err)[:30]}",
+                    "rsi": 50, "price_percentile": 50, "avg_entry": None,
+                    "position": 0, "cash": 0, "pnl": 0, "unrealized_pnl": 0,
+                }
             # Compute time guard: if neural simulation exceeds 30s, flag for optimization
             _compute_sec = neural.get("compute_seconds", 0)
             if _compute_sec > 30:
@@ -468,7 +531,7 @@ def main():
             # [果蠅參考纏論指標自主決策] 果蠅參考纏論數據後自己判斷買賣
             # 全局冷卻：賣出後15分鐘內不再買入（避免追高），買入後5分鐘內不再交易
             if last_trade_side == "SELL":
-                _global_cooldown = 900  # 賣出後冷卻15分鐘，避免追高
+                _global_cooldown = 1800 if _is_ranging else 900  # 震盪盤賣出後冷卻30分鐘，避免追高
             else:
                 _global_cooldown = 300  # 買入後冷卻5分鐘
             _time_since_trade = time.time() - last_trade_time if last_trade_time > 0 else 9999
@@ -798,10 +861,44 @@ def main():
             if chan_strategy is not None:
                 neural["side"] = chan_decision_side
                 neural["decision_note"] = chan_decision_note
+
+            # === 震盪盤優化：提高買賣門檻 + 止損 + 最小盈利目標 ===
+            if _is_ranging:
+                _ranging_note = " [震盪盤模式]"
+                # 止損：持倉虧損超過1.5%自動賣出
+                if has_position and avg_entry_price > 0:
+                    _stop_loss_pct = (current_price - avg_entry_price) / avg_entry_price * 100
+                    if _stop_loss_pct <= -1.5:
+                        neural["side"] = "SELL"
+                        neural["decision_note"] = f"[震盪盤止損] 虧損{_stop_loss_pct:.2f}%觸發止損線(-1.5%)，全數出清{_ranging_note}"
+                # 最小盈利目標：盈利不到0.2%不觸發高點賣出
+                elif has_position and avg_entry_price > 0 and neural["side"] == "SELL":
+                    _min_profit_pct = (current_price - avg_entry_price) / avg_entry_price * 100
+                    if 0 < _min_profit_pct < 0.2:
+                        neural["side"] = "HOLD"
+                        neural["decision_note"] = f"[震盪盤持有] 盈利{_min_profit_pct:.3f}%未達最小目標0.2%，繼續持有{_ranging_note}"
+                # 震盪盤買入需RSI<40（更嚴格）
+                elif neural["side"] == "BUY" and rsi_val >= 40:
+                    neural["side"] = "HOLD"
+                    neural["decision_note"] = f"[震盪盤觀察] RSI{rsi_val:.0f}未達超賣門檻(<40)，暫不買入{_ranging_note}"
+                else:
+                    if neural["decision_note"] and _ranging_note not in neural["decision_note"]:
+                        neural["decision_note"] += _ranging_note
             # 視覺高點賣出優先：價格百分位>=90%且有持倉時，無視纏論直接賣出
             if price_percentile >= 90 and has_position and visual_side == "SELL":
-                neural["side"] = "SELL"
-                neural["decision_note"] = visual_note + " [高點強制賣出]"
+                # 震盪盤最小盈利目標：不到0.2%不賣
+                if _is_ranging and avg_entry_price > 0:
+                    _hp_pct = (current_price - avg_entry_price) / avg_entry_price * 100
+                    if 0 < _hp_pct < 0.2:
+                        neural["side"] = "HOLD"
+                        neural["decision_note"] = f"[震盪盤持有] 高點但盈利{_hp_pct:.3f}%未達0.2%，繼續等待 [震盪盤模式]"
+                    else:
+                        neural["side"] = "SELL"
+                        neural["decision_note"] = visual_note + " [高點強制賣出]"
+                else:
+                    neural["side"] = "SELL"
+                    neural["decision_note"] = visual_note + " [高點強制賣出]"
+
 
             # Unlimited capital mode: no cash check, fixed 0.1 BTC per buy
             # 啟動保護：前10個tick只觀察不交易，讓果蠅先熟悉市場

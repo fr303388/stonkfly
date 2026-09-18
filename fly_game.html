@@ -80,6 +80,16 @@ canvas { display: block; }
         <div><span class="label">恐懼度:</span> <span class="value" id="fear">0%</span></div>
         <div><span class="label">吃到食物:</span> <span class="value" id="foodCount">0</span></div>
         <div><span class="label">神經活動:</span> <span class="value" id="neural">0</span></div>
+        <div style="margin-top:8px;border-top:1px solid rgba(0,255,255,0.2);padding-top:6px;">
+            <div style="color:#ff6b6b;font-size:10px;">🧠 果蠅大腦實時數據</div>
+            <div><span class="label">KC放電:</span> <span class="value" id="realKC">--</span></div>
+            <div><span class="label">左腦:</span> <span class="value" id="realLeft">--</span> <span class="label">右腦:</span> <span class="value" id="realRight">--</span></div>
+            <div><span class="label">閘門:</span> <span class="value" id="realGate">--</span></div>
+            <div><span class="label">決策:</span> <span class="value" id="realDecision">--</span></div>
+            <div><span class="label">RSI:</span> <span class="value" id="realRSI">--</span></div>
+            <div><span class="label">價格位:</span> <span class="value" id="realPct">--</span></div>
+            <div><span class="label">持倉:</span> <span class="value" id="realPos">--</span></div>
+        </div>
     </div>
     <button id="swatBtn" onclick="toggleSwat()">🪰 蒼蠅拍</button>
     <div id="instructions">移動滑鼠引導果蠅 · 點擊放置食物 · 切換蒼蠅拍模式嚇果蠅</div>
@@ -161,7 +171,10 @@ canvas.addEventListener('click', (e) => {
             neuralActivity.octopamine = Math.min(1, neuralActivity.octopamine + 0.2);
         }
     } else {
-        foods.push({ x: e.clientX, y: e.clientY, size: 12, pulse: 0 });
+        // Clamp food placement away from edges
+        const fx = Math.max(80, Math.min(W - 80, e.clientX));
+        const fy = Math.max(80, Math.min(H - 80, e.clientY));
+        foods.push({ x: fx, y: fy, size: 12, pulse: 0 });
         fly.fear = Math.min(100, fly.fear + 10);
         neuralActivity.octopamine = Math.min(1, neuralActivity.octopamine + 0.3);
     }
@@ -273,16 +286,20 @@ function updateFly(dt) {
     
     fly.wingPhase += 0.5 + fly.excitement * 0.02;
     
-    // Food collision
+    // Food collision - larger radius for easier pickup
     foods = foods.filter(f => {
         f.pulse += 0.1;
         const d = Math.hypot(f.x - fly.x, f.y - fly.y);
-        if (d < 20) {
+        if (d < 35) {
             fly.foodEaten++;
             fly.hunger = Math.max(0, fly.hunger - 30);
             fly.excitement = Math.min(100, fly.excitement + 15);
             neuralActivity.dopamine = Math.min(1, neuralActivity.dopamine + 0.8);
             neuralActivity.kenyon = Math.min(1, neuralActivity.kenyon + 0.3);
+            return false;
+        }
+        // Remove food stuck at edges
+        if (f.x < 60 || f.x > W - 60 || f.y < 60 || f.y > H - 60) {
             return false;
         }
         return true;
@@ -460,10 +477,76 @@ function sendNeuralActivity() {
     try { localStorage.setItem('fly_game_activity', JSON.stringify(data)); } catch(e) {}
 }
 
+// 獲取果蠅大腦真實神經元數據
+let realBrainData = null;
+async function fetchRealBrainData() {
+    try {
+        const resp = await fetch('/api/state', { cache: 'no-store' });
+        const data = await resp.json();
+        realBrainData = data;
+        const neural = data.latest?.neural || {};
+        const meta = data.meta || {};
+        
+        // 更新顯示
+        const kcEl = document.getElementById('realKC');
+        const leftEl = document.getElementById('realLeft');
+        const rightEl = document.getElementById('realRight');
+        const gateEl = document.getElementById('realGate');
+        const decEl = document.getElementById('realDecision');
+        const rsiEl = document.getElementById('realRSI');
+        const pctEl = document.getElementById('realPct');
+        const posEl = document.getElementById('realPos');
+        
+        if (kcEl) kcEl.textContent = (neural.total_spikes || 0).toLocaleString();
+        if (leftEl) leftEl.textContent = (neural.left_hz || 0).toFixed(1) + 'Hz';
+        if (rightEl) rightEl.textContent = (neural.right_hz || 0).toFixed(1) + 'Hz';
+        if (gateEl) gateEl.textContent = (neural.gate_spikes || 0) + ' spikes';
+        
+        if (decEl) {
+            const flySide = neural.fly_side || neural.side || 'HOLD';
+            const chanSide = neural.chan_side || 'HOLD';
+            const color = flySide === 'BUY' ? '#2ed573' : flySide === 'SELL' ? '#ff4757' : '#a4b0be';
+            decEl.innerHTML = `<span style="color:${color}">${flySide}</span> / ${chanSide}`;
+        }
+        
+        if (rsiEl) {
+            const rsi = data.latest?.rsi?.rsi || neural.rsi || '--';
+            rsiEl.textContent = typeof rsi === 'number' ? rsi.toFixed(1) : rsi;
+        }
+        
+        if (pctEl) {
+            const pct = data.latest?.price_percentile;
+            pctEl.textContent = pct !== undefined ? pct.toFixed(0) + '%' : '--';
+        }
+        
+        if (posEl) {
+            const pos = meta.positions?.['BTC-USDT'] || 0;
+            const cash = meta.cash || 0;
+            posEl.textContent = pos + ' BTC';
+        }
+        
+        // 用神經元數據影響遊戲果蠅行為
+        if (neural.side === 'BUY') {
+            fly.excitement = Math.min(100, fly.excitement + 0.5);
+        } else if (neural.side === 'SELL') {
+            fly.fear = Math.min(100, fly.fear + 0.3);
+        }
+        
+    } catch(e) {
+        // API不可用時保持不變
+    }
+}
+
+// 每3秒獲取一次真實神經元數據
+setInterval(fetchRealBrainData, 3000);
+setTimeout(fetchRealBrainData, 1000);
+
 let lastFoodSpawn = 0;
 function autoSpawnFood() {
     if (foods.length < 5 && Math.random() < 0.3) {
-        foods.push({ x: 50 + Math.random() * (W - 100), y: 50 + Math.random() * (H - 100), size: 12, pulse: 0, auto: true });
+        // Keep food away from edges (at least 80px)
+        const margin = 80;
+        foods.push({ x: margin + Math.random() * (W - margin * 2), y: margin + Math.random() * (H - margin * 2), size: 12, pulse: 0, auto: true });
     }
 }
 

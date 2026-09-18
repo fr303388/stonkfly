@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>果蠅大腦 3D 神經活動</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #050510; overflow: hidden; width: 100%; height: 100%; }
+#brain-container { width: 100%; height: 100%; position: relative; }
+#brain-info {
+    position: absolute; top: 8px; left: 10px;
+    font-family: 'Courier New', monospace; font-size: 10px;
+    color: #00ffff; text-shadow: 0 0 8px #00ffff;
+    pointer-events: none; z-index: 10;
+}
+#activity-bar {
+    position: absolute; bottom: 8px; left: 10px; right: 10px;
+    height: 4px; background: #1a1a2e; border-radius: 2px;
+    overflow: hidden; z-index: 10;
+}
+#activity-fill {
+    height: 100%; background: linear-gradient(90deg, #00ffff, #ff00ff);
+    width: 0%; transition: width 0.3s;
+    box-shadow: 0 0 10px #00ffff;
+}
+</style>
+</head>
+<body>
+<div id="brain-container">
+    <div id="brain-info">初始化中...</div>
+    <div id="activity-bar"><div id="activity-fill"></div></div>
+</div>
+<script>
+const N_NEURONS = 166700;
+const MAX_GLOW = 8000;
+
+let scene, camera, renderer, controls;
+let brainPoints = null;
+let brainGlowPoints = null;
+let brainPositions = null;
+let brainBaseColors = null;
+let animating = false;
+let lastSpikes = null;
+
+// Generate brain-shaped point cloud (ellipsoid with realistic density)
+function generateBrainPositions(n) {
+    const pos = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+        // Use rejection sampling in ellipsoid
+        let x, y, z, d;
+        do {
+            x = (Math.random() - 0.5) * 2;
+            y = (Math.random() - 0.5) * 2;
+            z = (Math.random() - 0.5) * 2;
+            d = x*x/(0.8*0.8) + y*y/(0.5*0.5) + z*z/(0.6*0.6);
+        } while (d > 1);
+        // Add some noise for organic look
+        pos[i*3] = x * 0.9 + (Math.random()-0.5)*0.05;
+        pos[i*3+1] = y * 0.55 + (Math.random()-0.5)*0.05;
+        pos[i*3+2] = z * 0.65 + (Math.random()-0.5)*0.05;
+    }
+    return pos;
+}
+
+// Region-based colors (cyberpunk palette)
+function getRegionColor(i, n) {
+    const ratio = i / n;
+    // Map neurons to regions based on position
+    const x = brainPositions[i*3], y = brainPositions[i*3+1], z = brainPositions[i*3+2];
+    let r, g, b;
+    if (Math.abs(x) > 0.5) {
+        // Optic lobes (sides) - cyan
+        r = 0.1; g = 0.6; b = 0.9;
+    } else if (y > 0.2) {
+        // Mushroom bodies (top) - magenta
+        r = 0.8; g = 0.2; b = 0.7;
+    } else if (y < -0.2) {
+        // Ventral (bottom) - teal
+        r = 0.15; g = 0.7; b = 0.75;
+    } else {
+        // Central brain - purple
+        r = 0.5; g = 0.2; b = 0.6;
+    }
+    return [r * 0.4, g * 0.4, b * 0.4]; // dim for base
+}
+
+function initBrain3D() {
+    const container = document.getElementById('brain-container');
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x050510);
+    scene.fog = new THREE.FogExp2(0x050510, 0.3);
+
+    camera = new THREE.PerspectiveCamera(50, w / h, 0.01, 100);
+    camera.position.set(0, 0, 2.2);
+
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    renderer.setSize(w, h);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    container.appendChild(renderer.domElement);
+
+    controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.rotateSpeed = 0.7;
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = 0.4;
+
+    // Generate positions
+    brainPositions = generateBrainPositions(N_NEURONS);
+
+    // Base point cloud
+    const baseGeom = new THREE.BufferGeometry();
+    baseGeom.setAttribute('position', new THREE.BufferAttribute(brainPositions, 3));
+    brainBaseColors = new Float32Array(N_NEURONS * 3);
+    for (let i = 0; i < N_NEURONS; i++) {
+        const c = getRegionColor(i, N_NEURONS);
+        brainBaseColors[i*3] = c[0];
+        brainBaseColors[i*3+1] = c[1];
+        brainBaseColors[i*3+2] = c[2];
+    }
+    baseGeom.setAttribute('color', new THREE.BufferAttribute(brainBaseColors, 3));
+    const baseMat = new THREE.PointsMaterial({
+        size: 0.008, vertexColors: true, transparent: true,
+        opacity: 0.6, sizeAttenuation: true, depthWrite: false
+    });
+    brainPoints = new THREE.Points(baseGeom, baseMat);
+    scene.add(brainPoints);
+
+    // Glow overlay (active neurons)
+    const glowGeom = new THREE.BufferGeometry();
+    const glowPos = new Float32Array(MAX_GLOW * 3);
+    const glowCol = new Float32Array(MAX_GLOW * 3);
+    glowGeom.setAttribute('position', new THREE.BufferAttribute(glowPos, 3));
+    glowGeom.setAttribute('color', new THREE.BufferAttribute(glowCol, 3));
+    const glowMat = new THREE.PointsMaterial({
+        size: 0.025, vertexColors: true, transparent: true,
+        opacity: 0.9, blending: THREE.AdditiveBlending,
+        depthWrite: false, sizeAttenuation: true
+    });
+    brainGlowPoints = new THREE.Points(glowGeom, glowMat);
+    brainGlowPoints.geometry.setDrawRange(0, 0);
+    scene.add(brainGlowPoints);
+
+    document.getElementById('brain-info').innerHTML =
+        `${N_NEURONS.toLocaleString()} 神經元<br>拖曳旋轉 | 滾輪縮放`;
+
+    animating = true;
+    animate();
+    fetchActivity();
+    setInterval(fetchActivity, 1500);
+}
+
+function updateBrainActivity(activeIndices, intensities) {
+    if (!brainGlowPoints || !brainPositions) return;
+    const count = Math.min(activeIndices.length, MAX_GLOW);
+    const glowPos = brainGlowPoints.geometry.attributes.position.array;
+    const glowCol = brainGlowPoints.geometry.attributes.color.array;
+
+    for (let i = 0; i < count; i++) {
+        const idx = activeIndices[i];
+        glowPos[i*3] = brainPositions[idx*3];
+        glowPos[i*3+1] = brainPositions[idx*3+1];
+        glowPos[i*3+2] = brainPositions[idx*3+2];
+        // Color: cyan for low, magenta for high intensity
+        const intensity = intensities ? intensities[i] : 0.5;
+        const r = intensity > 0.5 ? 1.0 : 0.2;
+        const g = 0.3 + (1-intensity) * 0.5;
+        const b = 1.0;
+        glowCol[i*3] = r;
+        glowCol[i*3+1] = g;
+        glowCol[i*3+2] = b;
+    }
+    brainGlowPoints.geometry.attributes.position.needsUpdate = true;
+    brainGlowPoints.geometry.attributes.color.needsUpdate = true;
+    brainGlowPoints.geometry.setDrawRange(0, count);
+}
+
+async function fetchActivity() {
+    try {
+        const res = await fetch('/api/brain3d');
+        if (!res.ok) return;
+        const data = await res.json();
+        const spikes = data.spikes || [];
+        const totalSpikes = data.total_spikes || 0;
+        const activeNeurons = data.active_neurons || 0;
+
+        // Find top active neurons
+        const indexed = spikes.map((s, i) => [i, s]);
+        indexed.sort((a, b) => b[1] - a[1]);
+        const topCount = Math.min(MAX_GLOW, Math.max(100, Math.floor(activeNeurons * 0.3)));
+        const activeIndices = indexed.slice(0, topCount).map(x => x[0]);
+        const maxSpike = indexed[0] ? indexed[0][1] : 1;
+        const intensities = indexed.slice(0, topCount).map(x => Math.min(1, x[1] / Math.max(1, maxSpike)));
+
+        updateBrainActivity(activeIndices, intensities);
+
+        // Update activity bar
+        const activityLevel = Math.min(100, (activeNeurons / N_NEURONS) * 100 * 5);
+        document.getElementById('activity-fill').style.width = activityLevel + '%';
+
+        // Update info
+        document.getElementById('brain-info').innerHTML =
+            `${N_NEURONS.toLocaleString()} 神經元 · ${activeNeurons.toLocaleString()} 活躍<br>` +
+            `放電 ${totalSpikes.toLocaleString()} · 發光 ${topCount.toLocaleString()}`;
+    } catch(e) {}
+}
+
+function animate() {
+    if (!animating) return;
+    requestAnimationFrame(animate);
+    controls.update();
+    // Pulse glow
+    if (brainGlowPoints) {
+        const t = Date.now() * 0.003;
+        brainGlowPoints.material.opacity = 0.7 + 0.3 * Math.sin(t);
+        brainGlowPoints.material.size = 0.022 + 0.008 * Math.sin(t * 1.5);
+    }
+    renderer.render(scene, camera);
+}
+
+window.addEventListener('resize', () => {
+    if (!renderer) return;
+    const w = window.innerWidth, h = window.innerHeight;
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+});
+
+initBrain3D();
+</script>
+</body>
+</html>
