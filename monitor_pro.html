@@ -394,7 +394,141 @@
                  cursor:pointer;margin-left:10px;box-shadow:0 0 12px #ff00ff;">
     🎮 果蠅遊戲
   </button>
+  <button onclick="toggleSettings()" 
+          style="background:linear-gradient(135deg,#00d2d3,#007a7d);border:none;color:#fff;
+                 padding:5px 14px;border-radius:14px;font-size:12px;font-weight:bold;
+                 cursor:pointer;margin-left:6px;box-shadow:0 0 12px #00d2d3;">
+    ⚙️ 設定
+  </button>
 </div>
+
+<!-- 切換時鎖定畫面遮罩 -->
+<div id="switchOverlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:99998;justify-content:center;align-items:center;">
+  <div style="text-align:center;color:#00ff88;font-family:'JetBrains Mono',monospace;">
+    <div style="font-size:48px;margin-bottom:16px;">⏳</div>
+    <div style="font-size:18px;font-weight:900;">切換交易對中...</div>
+    <div id="overlayStatus" style="font-size:13px;color:#888;margin-top:8px;">等待伺服器重啟</div>
+  </div>
+</div>
+
+<!-- 浮動設定視窗 -->
+<div id="settingsPanel" style="display:none;position:fixed;top:60px;right:20px;z-index:9999;
+     background:rgba(10,15,25,0.97);border:1px solid #00d2d3;border-radius:16px;
+     padding:20px;width:280px;box-shadow:0 8px 32px rgba(0,210,211,0.3);backdrop-filter:blur(10px);">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+    <span style="font-weight:900;color:#00d2d3;font-size:15px;">⚙️ 交易設定</span>
+    <span onclick="toggleSettings()" style="cursor:pointer;color:#888;font-size:18px;">✕</span>
+  </div>
+  <div style="margin-bottom:12px;">
+    <div style="font-size:11px;color:#888;margin-bottom:6px;letter-spacing:1px;">交易對</div>
+    <select id="setPair" style="width:100%;padding:8px;border-radius:8px;background:#111;
+      border:1px solid #333;color:#0f0;font-family:'JetBrains Mono',monospace;font-size:13px;">
+      <option value="BTC-USDT" selected>BTC/USDT</option>
+      <option value="ETH-USDT">ETH/USDT</option>
+      <option value="BNB-USDT">BNB/USDT</option>
+      <option value="SOL-USDT">SOL/USDT</option>
+      <option value="ZEC-USDT">ZEC/USDT</option>
+      <option value="ADA-USDT">ADA/USDT</option>
+      <option value="AVAX-USDT">AVAX/USDT</option>
+      <option value="DOT-USDT">DOT/USDT</option>
+      <option value="LINK-USDT">LINK/USDT</option>
+      <option value="LTC-USDT">LTC/USDT</option>
+      <option value="DOGE-USDT">DOGE/USDT</option>
+      <option value="PEPE-USDT">PEPE/USDT</option>
+    </select>
+  </div>
+  <div style="margin-bottom:14px;">
+    <div style="font-size:11px;color:#888;margin-bottom:6px;letter-spacing:1px;">起始資金（兩帳戶各）</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">
+      <button onclick="setCap(100,this)" class="cap-btn" style="padding:8px;border-radius:8px;background:#111;border:2px solid #00ff88;color:#0f0;cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:12px;">$100</button>
+      <button onclick="setCap(500,this)" class="cap-btn" style="padding:8px;border-radius:8px;background:#111;border:1px solid #333;color:#0f0;cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:12px;">$500</button>
+      <button onclick="setCap(1000,this)" class="cap-btn" style="padding:8px;border-radius:8px;background:#111;border:1px solid #333;color:#0f0;cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:12px;">$1K</button>
+      <button onclick="setCap(2000,this)" class="cap-btn" style="padding:8px;border-radius:8px;background:#111;border:1px solid #333;color:#0f0;cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:12px;">$2K</button>
+      <button onclick="setCap(5000,this)" class="cap-btn" style="padding:8px;border-radius:8px;background:#111;border:1px solid #333;color:#0f0;cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:12px;">$5K</button>
+      <button onclick="setCap(10000,this)" class="cap-btn" style="padding:8px;border-radius:8px;background:#111;border:1px solid #333;color:#0f0;cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:12px;">$10K</button>
+    </div>
+    <div style="margin-top:6px;display:flex;gap:6px;align-items:center;">
+      <span style="font-size:11px;color:#888;">自訂:</span>
+      <input id="customCap" type="number" min="10" placeholder="金額" 
+        style="flex:1;padding:8px;border-radius:8px;background:#111;border:1px solid #333;color:#0f0;
+        font-family:'JetBrains Mono',monospace;font-size:13px;outline:none;"
+        oninput="setCustomCap(this.value)">
+    </div>
+  </div>
+  <button onclick="applySettings()" style="width:100%;padding:10px;border-radius:10px;border:none;
+    background:linear-gradient(135deg,#00d2d3,#00ff88);color:#000;font-weight:900;font-size:14px;cursor:pointer;">
+    🔄 切換並重啟
+  </button>
+  <div id="setStatus" style="margin-top:8px;font-size:11px;color:#888;text-align:center;"></div>
+</div>
+
+<script>
+let selectedCap = 100;
+function toggleSettings() {
+  const p = document.getElementById('settingsPanel');
+  p.style.display = p.style.display === 'none' ? 'block' : 'none';
+}
+function setCap(amt, btn) {
+  selectedCap = amt;
+  document.querySelectorAll('.cap-btn').forEach(b => b.style.border = '1px solid #333');
+  btn.style.border = '2px solid #00ff88';
+  document.getElementById('customCap').value = '';
+}
+function setCustomCap(val) {
+  if (val && parseFloat(val) > 0) {
+    selectedCap = parseFloat(val);
+    // Deselect ALL preset buttons
+    document.querySelectorAll('.cap-btn').forEach(b => {
+      b.style.border = '1px solid #333';
+      b.style.background = '#111';
+    });
+  }
+}
+function applySettings() {
+  const pair = document.getElementById('setPair').value;
+  const status = document.getElementById('setStatus');
+  // Show overlay
+  const ov = document.getElementById('switchOverlay');
+  const ovStatus = document.getElementById('overlayStatus');
+  ov.style.display = 'flex';
+  ovStatus.textContent = '正在重啟伺服器...';
+  status.textContent = '⏳ 正在切換...';
+  fetch('/api/switch', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({pair: pair, capital: selectedCap})
+  }).then(r => r.json()).then(d => {
+    if (!d.ok) {
+      status.textContent = '❌ ' + (d.error || '失敗');
+      ov.style.display = 'none';
+      return;
+    }
+    ovStatus.textContent = '等待交易進程啟動...';
+    // Set dropdown to current product on load
+  if (typeof state !== 'undefined' && state.latest && state.latest.product) {
+    const sel = document.getElementById('setPair');
+    if (sel) sel.value = state.latest.product;
+  }
+  // Poll for server ready
+    let tries = 0;
+    const waitForReady = setInterval(() => {
+      tries++;
+      fetch('/api/state').then(r => r.json()).then(state => {
+        if (state.latest && state.latest.tick > 0) {
+          clearInterval(waitForReady);
+          ovStatus.textContent = '✅ 就緒，等待數據載入...';
+          setTimeout(() => location.reload(), 3000);
+        }
+      }).catch(() => {
+        if (tries > 45) { // 45s timeout
+          clearInterval(waitForReady);
+          status.textContent = '⚠️ 逾時，手動重新整理';
+        }
+      });
+    }, 1000);
+  }).catch(e => { status.textContent = '❌ ' + e; });
+}
+</script>
 
 <!-- 簡化帳戶資訊：左邊帳戶，右邊盈虧 -->
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;background:linear-gradient(180deg,rgba(0,210,211,0.08),transparent);border-bottom:1px solid var(--border);">
@@ -593,7 +727,7 @@
   <!-- Binance K-line Candlestick Chart -->
 <div class="panel kline-panel" style="margin:0;flex:1;min-width:0;">
   <div class="panel-header">
-    <span><span class="icon">📈</span>Binance ZEC/USDT K 線
+    <span><span class="icon">📈</span>Binance <span id="klineTitle"></span>/USDT K 線
       <button class="tf-btn active" onclick="setTimeframe('1m')" id="tf1m">1分</button>
       <button class="tf-btn" onclick="setTimeframe('5m')" id="tf5m">5分</button>
       <button class="tf-btn" onclick="setTimeframe('15m')" id="tf15m">15分</button>
@@ -633,7 +767,7 @@
   <!-- Depth Chart -->
   <div class="panel depth-panel" style="margin:0;width:340px;flex-shrink:0;margin-left:auto;">
     <div class="panel-header">
-      <span><span class="icon">📊</span>訂單簿深度 · ZEC/USDT</span>
+      <span><span class="icon">📊</span>訂單簿深度 · <span id="depthTitle"></span>/USDT</span>
       <span style="font-size:10px;color:var(--dim)" id="depthStatus">連接中…</span>
     </div>
     <div id="depthAsks" style="min-height:190px;"></div>
@@ -668,11 +802,15 @@
     <!-- 左邊：帳戶資訊 -->
     <div style="display:flex;flex-direction:column;gap:8px;">
       <div style="display:flex;justify-content:space-between;align-items:baseline;">
-        <span style="font-size:11px;color:var(--dim);letter-spacing:1px;">💰 可用現金</span>
-        <span id="pnlCash" style="font-size:22px;font-weight:900;color:#fff;font-family:'JetBrains Mono',monospace;">--</span>
+        <span style="font-size:11px;color:var(--dim);letter-spacing:1px;">🦟 果蠅現金</span>
+        <span id="pnlFlyCash" style="font-size:18px;font-weight:800;color:#fff;font-family:'JetBrains Mono',monospace;">--</span>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:baseline;">
-        <span style="font-size:11px;color:var(--dim);letter-spacing:1px;">📦 ZEC持倉</span>
+        <span style="font-size:11px;color:var(--dim);letter-spacing:1px;">🤖 無腦現金</span>
+        <span id="pnlNbCash" style="font-size:18px;font-weight:800;color:#fff;font-family:'JetBrains Mono',monospace;">--</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;">
+        <span style="font-size:11px;color:var(--dim);letter-spacing:1px;">📦 <span id="holdTitle"></span>持倉</span>
         <span id="pnlPosition" style="font-size:22px;font-weight:900;color:#00d2d3;font-family:'JetBrains Mono',monospace;">--</span>
       </div>
     </div>
@@ -1137,7 +1275,7 @@ function drawEyeChart() {
   const last = data[data.length - 1];
   ctx.fillStyle = '#4dd0e1';
   ctx.font = '11px "JetBrains Mono", monospace';
-  ctx.fillText('ZEC $' + last.c.toFixed(2), pad, 14);
+  ctx.fillText(productSymbol + ' $' + last.c.toFixed(2), pad, 14);
   document.getElementById('eyePrice').textContent = 'BID ' + last.c.toFixed(2) + '  ASK ' + (last.c * 1.0001).toFixed(2);
 }
 
@@ -1599,12 +1737,30 @@ async function fetchState() {
       if (Math.abs(brainStartTime - simStartTime) > 5000) simStartTime = brainStartTime;
     }
     updateUI();
+    // Sync dropdown to current product (only if settings panel is closed)
+    if (state.latest && state.latest.product) {
+      const panel = document.getElementById('settingsPanel');
+      if (panel && panel.style.display === 'none') {
+        const sel = document.getElementById('setPair');
+        if (sel) sel.value = state.latest.product;
+      }
+    }
+    // 立即更新盈虧（確保第一次載入就顯示，不用等kline）
+    if (state) {
+      const meta = state.meta || {};
+      const equity = parseFloat(state.latest ? state.latest.equity_usdc : 0) || 0;
+      const initial = parseFloat(meta.initial_cash || 100);
+      updatePnL(meta, equity, initial);
+      // 也更新下方交易紀錄區的盈虧摘要
+      const activeTab = document.querySelector('.tab-btn.active')?.dataset?.tab || 'fly';
+      updatePnlSummary(activeTab);
+    }
   } catch(e) { console.error('state error', e); }
 }
 
 // Fetch state periodically
 setInterval(fetchState, 3000);
-setTimeout(fetchState, 500);
+setTimeout(fetchState, 200);
 
 let currentTimeframe = '1m';
 
@@ -1642,6 +1798,7 @@ let tfRotateTimer = null;
 
 // Real-time Binance price (updates every 2s, independent of simulation steps)
 let liveBtcPrice = 0;
+let productSymbol = ''; // 從 API 動態更新
 let totalRealizedPnl = 0; // 已實現盈虧總和（由交易紀錄計算）
 let lastTradeCount = 0;
 let livePriceTimer = null;
@@ -1652,6 +1809,14 @@ function fetchLivePrice() {
     .then(d => {
       if (d && d.price) {
         liveBtcPrice = parseFloat(d.price);
+      }
+      if (state && state.latest && state.latest.product) {
+        productSymbol = state.latest.product.split('-')[0] || 'ZEC';
+    // Update all hardcoded labels
+    ['klineTitle','depthTitle','holdTitle'].forEach(function(id){
+      var el = document.getElementById(id);
+      if (el) el.textContent = productSymbol;
+    });
       }
     })
     .catch(() => {});
@@ -1750,7 +1915,7 @@ function initTvChart() {
   if (!window._tpRedrawTimer) {
     window._tpRedrawTimer = setInterval(() => {
       if (currentTP._avg && tvCandleSeries) drawPivotOverlay();
-    }, 2000);
+    }, 1000);
   }
 }
 
@@ -2250,70 +2415,35 @@ async function fetch1mPrice() {
 }
 
 function updatePnL(meta, simEquity, initial) {
+  // === 單一數據源：直接用後端給的數字，前端不重算 ===
   const cash = meta.cash ? parseFloat(meta.cash) : 0;
   const positions = meta.positions || {};
-  // Get position amount
   let btcAmount = 0;
   for (const [product, amount] of Object.entries(positions)) {
     btcAmount += parseFloat(amount) || 0;
   }
-  // Use simulation real-time quote bid price
   const simQuote = (state && state.latest && state.latest.quote) ? state.latest.quote : {};
   const markPrice = liveBtcPrice > 0 ? liveBtcPrice : (simQuote.bid ? parseFloat(simQuote.bid) : (marketPrice1m > 0 ? marketPrice1m : lastBtcPrice));
-  // Position value at real-time bid price
-  const posValue = btcAmount > 0 ? btcAmount * markPrice : 0;
-  // 果蠅總權益 = 現金 + 持倉價值
-  const flyEquity = cash + posValue;
-  // 果蠅總盈虧 = 總權益 - 初始資金（最準確，不會重複計算）
+
+  // 果蠅：直接用後端 equity_usdc
+  const flyEquity = parseFloat(state.latest?.equity_usdc || simEquity || cash);
   const flyTotalPnl = flyEquity - initial;
-  // 無腦交易盈虧（從no_brain_state獲取）
+
+  // 無腦：直接用後端 no_brain_state.equity（已包含 unrealized）
   const nbState = (state && state.no_brain_state) ? state.no_brain_state : {};
-  const nbInitial = 100; // 無腦交易初始資金
-  const nbCash = parseFloat(nbState.cash || 0);
+  const nbInitial = parseFloat(nbState.initial_cash || initial);
+  const nbEquity = parseFloat(nbState.equity || 0);
+  const nbTotalPnl = nbEquity - nbInitial;
   const nbPos = parseFloat(nbState.position || 0);
-  const nbEquityFromState = parseFloat(nbState.equity || 0);
-  // 無腦交易權益 = 現金 + 持倉市值（使用當前市價，不用均價）
-  const nbHasData = (nbCash > 0 || nbPos > 0 || nbEquityFromState > 0);
-  const nbEquity = nbHasData ? (nbCash + nbPos * markPrice) : 0;
-  const nbTotalPnl = nbHasData ? (nbEquity - nbInitial) : 0;
-  // 合計總盈虧 = 果蠅 + 無腦
+  const nbUnrealized = parseFloat(nbState.unrealized_pnl || 0);
+
+  // 合計
   const totalPnl = flyTotalPnl + nbTotalPnl;
-  // 未實現盈虧：直接計算果蠅+無腦的持倉浮動盈虧
-  const nbRealized = parseFloat(nbState.realized_pnl || 0) || 0;
-  const nbPosition = parseFloat(nbState.position || 0) || 0;
-  const nbAvgEntry = parseFloat(nbState.avg_entry || 0) || 0;
-  const nbUnrealized = nbPosition > 0 && nbAvgEntry > 0 && markPrice > 0 ? (markPrice - nbAvgEntry) * nbPosition : 0;
-  // 果蠅未實現盈虧：從交易記錄計算持倉均價（系統重啟後neural.avg_entry會變None）
-  let flyAvgEntry = 0;
-  try {
-    if (btcAmount > 0 && state && Array.isArray(state.events)) {
-      const filled = state.events.filter(ev => ev && ev.execution && ev.execution.status === 'FILLED');
-      let posQty = 0, posCost = 0;
-      filled.forEach(ev => {
-        try {
-          const ex = ev.execution || {};
-          const base = parseFloat(ex.base) || 0;
-          const quoteVal = parseFloat(ex.quote) || 0;
-          const price = base > 0 ? quoteVal / base : 0;
-          const side = ev.neural ? ev.neural.side : (ev.side || '');
-          if (side === 'BUY' && base > 0) {
-            const newQty = posQty + base;
-            posCost = newQty > 0 ? (posCost * posQty + price * base) / newQty : 0;
-            posQty = newQty;
-          } else if (side === 'SELL' && base > 0) {
-            posQty = Math.max(0, posQty - base);
-            if (posQty === 0) posCost = 0;
-          }
-        } catch(e) {}
-      });
-      flyAvgEntry = posCost;
-    }
-  } catch(e) { console.warn('計算果蠅均價失敗:', e); }
-  const flyUnrealized = btcAmount > 0 && flyAvgEntry > 0 && markPrice > 0 ? (markPrice - flyAvgEntry) * btcAmount : 0;
-  const unrealized = flyUnrealized + nbUnrealized;
-  const roi = initial > 0 ? (totalPnl / initial * 100) : 0;
+  const unrealized = nbUnrealized; // 果蠅無持倉時就是0
+  const roi = initial > 0 ? (totalPnl / (initial + nbInitial) * 100) : 0;
 
   // Position value (fly + no_brain)
+  const posValue = btcAmount > 0 ? btcAmount * markPrice : 0;
   const totalPosValue = posValue + (nbPos * markPrice);
   const posValEl = document.getElementById('posValue');
   if (posValEl) posValEl.textContent = totalPosValue > 0 ? '$' + totalPosValue.toFixed(4) : '$0.00';
@@ -2323,7 +2453,7 @@ function updatePnL(meta, simEquity, initial) {
   const pnlLive = document.getElementById('pnlLive');
   const pnlPct = document.getElementById('pnlPct');
   if (pnlLive) {
-    pnlLive.textContent = (totalPnl >= 0 ? '+' : '') + '$' + totalPnl.toFixed(2);
+    pnlLive.textContent = (totalPnl >= 0 ? '+' : '') + '$' + totalPnl.toFixed(4);
     pnlLive.style.color = totalPnl >= 0 ? 'var(--green)' : 'var(--red)';
   }
   if (pnlPct) {
@@ -2338,14 +2468,14 @@ function updatePnL(meta, simEquity, initial) {
   // 果蠅盈虧（已實現+未實現）
   const flyPnlEl = document.getElementById('flyPnlLive');
   if (flyPnlEl) {
-    flyPnlEl.textContent = (flyTotalPnl >= 0 ? '+' : '') + '$' + flyTotalPnl.toFixed(2);
+    flyPnlEl.textContent = (flyTotalPnl >= 0 ? '+' : '') + '$' + flyTotalPnl.toFixed(4);
     flyPnlEl.style.color = flyTotalPnl >= 0 ? 'var(--green)' : 'var(--red)';
   }
 
   // 無腦盈虧（已實現+未實現）
   const nbPnlEl = document.getElementById('nbPnlLive');
   if (nbPnlEl) {
-    nbPnlEl.textContent = (nbTotalPnl >= 0 ? '+' : '') + '$' + nbTotalPnl.toFixed(2);
+    nbPnlEl.textContent = (nbTotalPnl >= 0 ? '+' : '') + '$' + nbTotalPnl.toFixed(4);
     nbPnlEl.style.color = nbTotalPnl >= 0 ? 'var(--green)' : 'var(--red)';
   }
 
@@ -2371,8 +2501,10 @@ function updatePnL(meta, simEquity, initial) {
   const pnlSub = document.getElementById('pnlSub');
   if (pnlSub) {
     const simPriceStr = markPrice > 0 ? '$' + (markPrice < 0.01 ? markPrice.toFixed(8) : markPrice.toFixed(2)) : '--';
-    const avgStr = flyAvgEntry > 0 ? '$' + (flyAvgEntry < 0.01 ? flyAvgEntry.toFixed(8) : flyAvgEntry.toFixed(2)) : '--';
-    pnlSub.textContent = `持倉 ${btcAmount > 0 ? btcAmount.toFixed(6) : '0'} BTC · 均價 ${avgStr} · 模擬價 ${simPriceStr} · 現金 $${cash.toFixed(2)}`;
+    const avgEntry = parseFloat(nbState.avg_entry || 0);
+    const avgStr = avgEntry > 0 ? '$' + (avgEntry < 0.01 ? avgEntry.toFixed(8) : avgEntry.toFixed(2)) : '--';
+    const totalPos = btcAmount + nbPos;
+    pnlSub.textContent = `持倉 ${totalPos.toFixed(6)} ${productSymbol} · 均價 ${avgStr} · 模擬價 ${simPriceStr} · 現金 $${(cash + nbPos * markPrice).toFixed(2)}`;
   }
 }
 
@@ -2414,7 +2546,8 @@ function updateUI() {
   const totalCashTop = flyCashTop + nbCashTop;
   document.getElementById('cash').textContent = '$' + totalCashTop.toLocaleString('en-US', {maximumFractionDigits: 2});
   const flyInitial = parseFloat(meta.initial_cash || 100);
-  const displayInitial = flyInitial + 100; // 顯示用：果蠅+無腦總和
+  const nbInitialTop = parseFloat(nbStateTop.initial_cash || flyInitial);
+  const displayInitial = flyInitial + nbInitialTop;
   document.getElementById('initialCash').textContent = '$' + displayInitial.toLocaleString('en-US', {maximumFractionDigits: 0});
   document.getElementById('totalSpikes').textContent = (neural.total_spikes || 0).toLocaleString();
   document.getElementById('brainMs').textContent = (neural.brain_ms || 0).toFixed(0) + 'ms';
@@ -2634,59 +2767,37 @@ function switchTradeTab(tab) {
 
 function updatePnlSummary(tab) {
   if (!state) return;
-  const cashEl = document.getElementById('pnlCash');
   const posEl = document.getElementById('pnlPosition');
   const flyTotalEl = document.getElementById('pnlFlyTotal');
   const nbTotalEl = document.getElementById('pnlNbTotal');
   const totalEl = document.getElementById('pnlTotal');
-  if (!cashEl) return;
 
   const latest = state.latest || {};
-  const markPrice = parseFloat(latest.quote?.bid || latest.quote?.price || 0);
-
-  // === 計算果蠅盈虧 ===
   const meta = state.meta || {};
+
+  // === 果蠅：直接用後端 equity_usdc ===
   const flyCash = parseFloat(meta.cash || 0);
   const flyPositions = meta.positions || {};
-  const flyBtc = parseFloat(flyPositions['ZEC-USDT'] || 0);
-  let flyAvg = parseFloat(meta.avg_entry_price || latest.neural?.avg_entry || 0);
-  if (flyAvg <= 0 && flyBtc > 0) {
-    const filled = (state.events || []).filter(ev => ev.execution && ev.execution.status === 'FILLED');
-    let tc = 0, tq = 0;
-    filled.forEach(ev => {
-      const ex = ev.execution || {};
-      const b = parseFloat(ex.base || 0);
-      const q = parseFloat(ex.quote || 0);
-      const side = ev.neural ? ev.neural.side : '';
-      if (side === 'BUY' && b > 0) { tc += q; tq += b; }
-      else if (side === 'SELL' && b > 0) {
-        const ac = tq > 0 ? tc / tq : 0;
-        tc -= ac * Math.min(b, tq);
-        tq = Math.max(0, tq - b);
-      }
-    });
-    flyAvg = tq > 0 ? tc / tq : 0;
-  }
-  const flyUnrealized = flyBtc > 0 && flyAvg > 0 && markPrice > 0 ? (markPrice - flyAvg) * flyBtc : 0;
-  const flyTotal = (typeof totalRealizedPnl === 'number' ? totalRealizedPnl : 0) + flyUnrealized;
+  let flyBtc = 0;
+  for (const [k,v] of Object.entries(flyPositions)) { flyBtc += parseFloat(v)||0; }
+  const flyEquity = parseFloat(latest.equity_usdc || flyCash);
+  const flyInit = parseFloat(meta.initial_cash || 100);
+  const flyTotal = flyEquity - flyInit;
 
-  // === 計算無腦盈虧 ===
+  // === 無腦：直接用後端 no_brain_state ===
   const nbState = (state && state.no_brain_state) ? state.no_brain_state : {};
   const nbCash = parseFloat(nbState.cash || 0);
   const nbBtc = parseFloat(nbState.position || 0);
-  const nbAvg = parseFloat(nbState.avg_entry || 0);
-  const nbRealized = parseFloat(nbState.realized_pnl || 0);
-  const nbUnrealized = nbBtc > 0 && nbAvg > 0 && markPrice > 0 ? (markPrice - nbAvg) * nbBtc : 0;
-  const nbTotal = nbRealized + nbUnrealized;
+  const nbEquity = parseFloat(nbState.equity || 0);
+  const nbInit = parseFloat(nbState.initial_cash || (parseFloat(meta.initial_cash || 100) / 2));
+  const nbTotal = nbEquity - nbInit;
 
   // === 顯示 ===
-  if (tab === 'fly') {
-    cashEl.textContent = '$' + flyCash.toLocaleString('en-US', {maximumFractionDigits: 2});
-    posEl.textContent = flyBtc.toFixed(4) + ' ZEC';
-  } else {
-    cashEl.textContent = '$' + nbCash.toLocaleString('en-US', {maximumFractionDigits: 2});
-    posEl.textContent = nbBtc.toFixed(6) + ' ZEC';
-  }
+  const flyCashEl = document.getElementById('pnlFlyCash');
+  const nbCashEl = document.getElementById('pnlNbCash');
+  if (flyCashEl) flyCashEl.textContent = '$' + flyCash.toLocaleString('en-US', {maximumFractionDigits: 2});
+  if (nbCashEl) nbCashEl.textContent = '$' + nbCash.toLocaleString('en-US', {maximumFractionDigits: 2});
+  posEl.textContent = flyBtc.toFixed(4) + ' / ' + nbBtc.toFixed(6) + ' ' + productSymbol;
   // 果蠅盈虧
   if (flyTotalEl) {
     flyTotalEl.textContent = (flyTotal >= 0 ? '+' : '') + '$' + flyTotal.toFixed(2);
@@ -2741,7 +2852,7 @@ function renderNoBrainTrades(trades) {
       <span style="color:var(--dim)">${time}</span>
       <span style="color:${sideColor};font-weight:700">${side}</span>
       <span style="color:var(--text)">${price}</span>
-      <span style="color:var(--text)">${amount}</span>
+      <span style="color:var(--text)">${amount}<br><span style="font-size:10px;color:var(--dim)">${qty}</span></span>
       <span style="color:${pnlColor};white-space:nowrap;text-align:right;">${pnlText}</span>
       <span style="color:${pnlPctColor};font-weight:600;white-space:nowrap;text-align:right;">${pnlPctText}</span>
       <span style="color:var(--cyan);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left;" title="${signal}">${signal}</span>
@@ -2842,6 +2953,7 @@ function renderEvents(events) {
     const ex = ev.execution || {};
     const txAmount = ex.quote ? '$' + parseFloat(ex.quote).toFixed(2) : '--';
     const txAmountNum = ex.quote ? parseFloat(ex.quote) : 0;
+    const txQty = ex.base ? parseFloat(ex.base).toFixed(6) : '--';
     let fillPrice = '--';
     if (ex.base && ex.quote) {
       const base = parseFloat(ex.base), quoteVal = parseFloat(ex.quote);
@@ -2864,7 +2976,7 @@ function renderEvents(events) {
       <span style="color:var(--cyan);font-family:'JetBrains Mono',monospace">${time}</span>
       <span style="color:${sideColor};font-weight:700">${side}</span>
       <span style="color:var(--yellow);font-family:'JetBrains Mono',monospace">${fillPrice}</span>
-      <span style="color:var(--text);font-weight:600">${txAmount}</span>
+      <span style="color:var(--text);font-weight:600">${txAmount}<br><span style="font-size:10px;color:var(--dim)">${txQty}</span></span>
       <span style="color:${pnlColor};white-space:nowrap;text-align:right;">${pnlText}</span>
       <span style="color:${pnlPctColor};font-weight:600;white-space:nowrap;text-align:right;">${pnlPctText}</span>
       <span style="color:var(--dim);font-size:10px;font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left;" title="${reason}">${reason}</span>
@@ -3184,7 +3296,7 @@ tryInitChart();
 try { fetchTokenInfo(); } catch(e) {}
 try { fetch1mPrice(); } catch(e) {}
 try { updateClock(); } catch(e) {}
-setInterval(() => { try { fetchState(); } catch(e) {} }, 2000);
+setInterval(() => { try { fetchState(); } catch(e) {} }, 1000);
 setInterval(() => { try { fetchKlines(); } catch(e) {} }, 5000);
 setInterval(() => { try { fetch1mPrice(); } catch(e) {} }, 3000);
 setInterval(() => { try { fetchTokenInfo(); } catch(e) {} }, 10000);
@@ -3246,7 +3358,7 @@ function renderDepth() {
     return '<div class="depth-row depth-ask">' +
       '<div class="depth-bar" style="width:' + pct + '%;"></div>' +
       '<span class="depth-price">' + a[0].toFixed(2) + '</span>' +
-      '<span class="depth-qty">' + a[1].toFixed(4) + ' ZEC</span></div>';
+      '<span class="depth-qty">' + a[1].toFixed(4) + ' ' + productSymbol + '</span></div>';
   }).join('');
 
   // Bids (cyan, bottom)
@@ -3255,7 +3367,7 @@ function renderDepth() {
     return '<div class="depth-row depth-bid">' +
       '<div class="depth-bar" style="width:' + pct + '%;"></div>' +
       '<span class="depth-price">' + b[0].toFixed(2) + '</span>' +
-      '<span class="depth-qty">' + b[1].toFixed(4) + ' ZEC</span></div>';
+      '<span class="depth-qty">' + b[1].toFixed(4) + ' ' + productSymbol + '</span></div>';
   }).join('');
 
   // Buy/Sell ratio

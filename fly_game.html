@@ -520,9 +520,15 @@ async function fetchRealBrainData() {
         }
         
         if (posEl) {
-            const pos = meta.positions?.['BTC-USDT'] || 0;
-            const cash = meta.cash || 0;
-            posEl.textContent = pos + ' BTC';
+            const product = data.latest?.product || 'ZEC-USDT';
+            const sym = product.split('-')[0] || 'ZEC';
+            const positions = meta.positions || {};
+            let pos = 0;
+            for (const [k, v] of Object.entries(positions)) { pos += parseFloat(v) || 0; }
+            // 加上無腦交易持倉
+            const nbState = data.no_brain_state || {};
+            pos += parseFloat(nbState.position || 0);
+            posEl.textContent = pos.toFixed(4) + ' ' + sym;
         }
         
         // 用神經元數據影響遊戲果蠅行為

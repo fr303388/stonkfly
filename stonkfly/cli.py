@@ -334,7 +334,7 @@ def main():
         web_learner.save_path = out / "chanlun_web_learning.json"
         web_learner.state = web_learner._load_state()
         _web_study_counter = 0
-        no_brain_trader = ChanNoBrainTrader(out / "no_brain_state.json", initial_cash=100.0)
+        no_brain_trader = ChanNoBrainTrader(out / "no_brain_state.json", initial_cash=float(settings.capital))
         provider = StonkflyActions(guard, broker)
         action = provider.get_actions()[0]
         count = 0
@@ -439,12 +439,13 @@ def main():
             try:
                 # 從幣安API獲取5分K線數據
                 import urllib.request as _ur
-                _nb_url = "https://api.binance.com/api/v3/klines?symbol=ZECUSDT&interval=5m&limit=200"
+                _nb_symbol = product.replace("-", "") if product else "BTCUSDT"
+                _nb_url = "https://api.binance.com/api/v3/klines?symbol=" + _nb_symbol + "&interval=5m&limit=200"
                 _nb_req = _ur.Request(_nb_url, headers={"User-Agent": "Mozilla/5.0"})
                 with _ur.urlopen(_nb_req, timeout=10) as _nb_resp:
                     _nb_raw = json.loads(_nb_resp.read().decode("utf-8"))
                 _klines_for_nb = [{"t": k[0], "o": float(k[1]), "h": float(k[2]), "l": float(k[3]), "c": float(k[4]), "v": float(k[5])} for k in _nb_raw]
-                _czsc_struct = extract_czsc_structures(_klines_for_nb, freq="1m")
+                _czsc_struct = extract_czsc_structures(_klines_for_nb, freq="5m")
                 _czsc_struct["klines"] = _klines_for_nb  # 傳入K線數據用於預測分型
                 _current_price = float(q.bid) if q and hasattr(q, 'bid') else 0.0
                 _nb_result = no_brain_trader.process_signal(_czsc_struct, _current_price)
@@ -834,7 +835,7 @@ def main():
                         rsi=rsi_val, czsc=czsc_analysis, price_percentile=price_percentile,
                         neural_gate=neural_gate, neural_diff=neural_right-neural_left,
                         practical_skill="bottom_fractal", has_position=has_position
-                    ) + f" [視覺觸底 第1批 {neural['batch_size']}BTC]"
+                    ) + f" [視覺觸底 第1批 {neural['batch_size']}{product.split('-')[0]}]"
                 # High point: sell all
                 elif price_percentile >= 90 and has_position:
                     neural["side"] = "SELL"

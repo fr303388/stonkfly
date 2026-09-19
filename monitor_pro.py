@@ -18,10 +18,28 @@ import urllib.request
 from pathlib import Path
 
 import numpy as np
-from flask import Flask, jsonify, send_file, make_response, send_from_directory
+from flask import Flask, jsonify, send_file, make_response, send_from_directory, request
 
+
+
+def _get_current_symbol():
+    """Read current trading pair from latest.json, default ZECUSDT."""
+    try:
+        import json
+        d = json.load(open("runs/paper/latest.json"))
+        prod = d.get("product", "ZEC-USDT")
+        return prod.replace("-", "")  # ZEC-USDT -> ZECUSDT
+    except:
+        return "ZECUSDT"
 
 app = Flask(__name__)
+
+@app.after_request
+def add_no_cache_headers(response):
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
 
 @app.route("/api/mem")
 def api_mem():
@@ -39,7 +57,47 @@ def api_mem():
         pass
     return {"mb": 0}
 
-@app.errorhandler(Exception)
+@app.route("/api/switch", methods=["POST"])
+def api_switch():
+    import subprocess, json, os
+    data = request.get_json(force=True)
+    pair = data.get("pair", "ZEC-USDT")
+    capital = str(int(data.get("capital", 100)) // 2)  # half for fly, half for no_brain
+
+    # Patch capital
+    try:
+        cfg = Path("stonkfly/config.py").read_text(encoding="utf-8")
+        import re as _re
+        cfg = _re.sub(r'capital[^=]*=\s*["\']?\d+["\']?', 'capital: str = "' + capital + '"', cfg)
+        Path("stonkfly/config.py").write_text(cfg, encoding="utf-8")
+        import shutil
+        pycache = Path("stonkfly/__pycache__")
+        if pycache.exists(): shutil.rmtree(pycache)
+    except Exception as e:
+        print("Config patch error:", e)
+
+    # Write batch script that restarts EVERYTHING (including monitor)
+    venv_py = str(Path(".venv/Scripts/python.exe").resolve())
+    work_dir = str(Path(".").resolve())
+    bat_path = str(Path("do_switch.bat").resolve())
+    lines = [
+        "@echo off",
+        'cd /d "' + work_dir + '"',
+        "timeout /t 1 /nobreak >nul",
+        "taskkill /F /IM python.exe >nul 2>&1",
+        "timeout /t 1 /nobreak >nul",
+        "del /q runs\paper\* >nul 2>&1",
+        'start /b "" "' + venv_py + '" monitor_pro.py',
+        "timeout /t 1 /nobreak >nul",
+        'start /b "" "' + venv_py + '" -u -m stonkfly.cli run --out runs/paper --products ' + pair + ' --exchange binance --steps 1000 --hz432',
+        'del "%~f0"',
+    ]
+    Path(bat_path).write_text("\r\n".join(lines), encoding="gbk")
+    subprocess.Popen(["cmd", "/c", bat_path], creationflags=0x00000008)
+
+    return jsonify({"ok": True, "pair": pair, "capital": capital, "msg": "切換中..."})
+
+app.errorhandler(Exception)
 def handle_all_errors(e):
     import traceback
     traceback.print_exc()
@@ -300,7 +358,8 @@ def _fetch_binance(interval="1m", limit=200):
     now = time.time()
     if interval in _binance_cache and now - _binance_cache[interval]["time"] < 3:
         return _binance_cache[interval]["data"]
-    url = f"https://api.binance.com/api/v3/klines?symbol=ZECUSDT&interval={interval}&limit={limit}"
+    sym = _get_current_symbol()
+    url = f"https://api.binance.com/api/v3/klines?symbol={sym}&interval={interval}&limit={limit}"
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=10) as resp:
@@ -319,13 +378,13 @@ def _fetch_token_info():
     if _token_cache["data"] and now - _token_cache["time"] < 5:
         return _token_cache["data"]
     try:
-        url = "https://api.binance.com/api/v3/ticker/24hr?symbol=ZECUSDT"
+        url = "https://api.binance.com/api/v3/ticker/24hr?symbol=" + _get_current_symbol() + ""
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=10) as resp:
             d = json.loads(resp.read().decode("utf-8"))
         info = {
             "price": float(d["lastPrice"]),
-            "symbol": "ZEC",
+            "symbol": _get_current_symbol().replace("USDT",""),
             "quote": "USDT",
             "price_change": {"h24": float(d["priceChangePercent"]), "h1": 0, "m5": 0},
             "volume": {"h24": float(d["quoteVolume"])},
@@ -355,9 +414,14 @@ def api_state():
         events = _read_events(RUN_DIR / "events.jsonl")
         brain = _load_brain_summary()
         watchdog = _read_json(RUN_DIR / "watchdog_stats.json") or {"restart_count": 0}
-        # 無腦交易紀錄與狀態
-        no_brain_state = _read_json(RUN_DIR / "no_brain_state.json") or {}
-        no_brain_trades = no_brain_state.get("trades", [])
+        # 無腦交易：狀態直接用 latest.json（每 tick 更新），交易紀錄從存檔讀
+        saved_state = _read_json(RUN_DIR / "no_brain_state.json") or {}
+        no_brain_state = latest.get("no_brain", {}) or {}
+        # Merge saved state (includes initial_cash)
+        for k in ('initial_cash',):
+            if k not in no_brain_state and k in saved_state:
+                no_brain_state[k] = saved_state[k]
+        no_brain_trades = saved_state.get("trades", [])
         return jsonify({"latest": latest, "meta": meta, "events": events, "brain": brain, "watchdog": watchdog, "no_brain_trades": no_brain_trades, "no_brain_state": no_brain_state, "server_time": time.time()})
     except Exception as e:
         return jsonify({"latest": {}, "meta": {}, "events": [], "brain": {}, "watchdog": {"restart_count": 0}, "no_brain_trades": [], "no_brain_state": {}, "error": str(e), "server_time": time.time()})
@@ -419,7 +483,8 @@ def api_depth():
     if _depth_cache["data"] and now - _depth_cache["time"] < 1:
         return jsonify(_depth_cache["data"])
     try:
-        url = "https://api.binance.com/api/v3/depth?symbol=ZECUSDT&limit=20"
+        sym2 = _get_current_symbol()
+        url = f"https://api.binance.com/api/v3/depth?symbol={sym2}&limit=20"
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=5) as resp:
             raw = json.loads(resp.read().decode("utf-8"))
