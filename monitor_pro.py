@@ -20,7 +20,24 @@ from pathlib import Path
 import numpy as np
 from flask import Flask, jsonify, send_file, make_response, send_from_directory
 
+
 app = Flask(__name__)
+
+@app.route("/api/mem")
+def api_mem():
+    import subprocess, os
+    try:
+        pid = os.getpid()
+        r = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+                          capture_output=True, text=True, timeout=5)
+        parts = r.stdout.strip().split('","')
+        if len(parts) >= 5:
+            mem_str = parts[4].replace('"','').replace(' K','').replace(',','').strip()
+            mb = float(mem_str) / 1024
+            return {"mb": round(mb, 1)}
+    except:
+        pass
+    return {"mb": 0}
 
 @app.errorhandler(Exception)
 def handle_all_errors(e):

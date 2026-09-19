@@ -385,6 +385,7 @@
   <span class="badge badge-paused" id="statusBadge">運行中</span>
   <div class="header-stat">步驟 <b id="stepNum">--</b></div>
   <div class="header-stat">⏱ <b id="simTimer">00:00:00</b></div>
+  <div class="header-stat">💾 <b id="memUsage">-- MB</b></div>
   <div class="spacer"></div>
   <div class="header-stat" style="font-family:'JetBrains Mono',monospace;font-size:16px;color:var(--cyan);font-weight:700;" id="clock">--:--:--</div>
   <button onclick="toggleFlyGame()" 
@@ -2312,9 +2313,10 @@ function updatePnL(meta, simEquity, initial) {
   const unrealized = flyUnrealized + nbUnrealized;
   const roi = initial > 0 ? (totalPnl / initial * 100) : 0;
 
-  // Position value
+  // Position value (fly + no_brain)
+  const totalPosValue = posValue + (nbPos * markPrice);
   const posValEl = document.getElementById('posValue');
-  if (posValEl) posValEl.textContent = posValue > 0 ? '$' + posValue.toFixed(4) : '$0.00';
+  if (posValEl) posValEl.textContent = totalPosValue > 0 ? '$' + totalPosValue.toFixed(4) : '$0.00';
 
   // Total P&L highlight (合計)
   const pnlBox = document.getElementById('pnlBox');
@@ -3111,6 +3113,12 @@ setInterval(() => {
   const s = String(elapsed % 60).padStart(2, '0');
   const el = document.getElementById('simTimer');
   if (el) el.textContent = h + ':' + m + ':' + s;
+  // Fetch memory usage
+  fetch('/api/mem').then(r=>r.json()).then(d=>{
+    const m = document.getElementById('memUsage');
+    if (m) m.textContent = d.mb + ' MB';
+    m.style.color = d.mb > 3500 ? '#ff6b6b' : 'var(--dim)';
+  }).catch(()=>{});
 }, 1000);
 
 // ============ BRAIN TOGGLE ============
