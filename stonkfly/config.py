@@ -25,8 +25,8 @@ def up(value, step):
 @dataclass(frozen=True)
 class Settings:
     products: tuple[str, ...] = ("BTC-USDC",)
-    capital: str = "100000"
-    order_limit: str = "100000"
+    capital: str = "100"
+    order_limit: str = "100"
     loss_stop: str = "500000"
     fee_reserve: str = "0.02"
     slippage: str = "0.005"
@@ -49,7 +49,7 @@ class Settings:
         if (
             not self.products
             or len(set(self.products)) != len(self.products)
-            or not set(self.products) <= set(("BTC-USDC", "ETH-USDC", "SOL-USDC", "PEPE-USDT", "BTC-USDT", "BNB-USDT"))
+            or not set(self.products) <= set(("BTC-USDT", "ETH-USDT", "BNB-USDT", "SOL-USDT", "ZEC-USDT", "ADA-USDT", "AVAX-USDT", "DOT-USDT", "LINK-USDT", "LTC-USDT", "NEAR-USDT", "ATOM-USDT", "ARB-USDT", "OP-USDT", "INJ-USDT", "SUI-USDT", "SEI-USDT", "DOGE-USDT", "SHIB-USDT", "PEPE-USDT", "WIF-USDT", "FLOKI-USDT", "BONK-USDT"))
         ):
             raise ValueError("Only allowlisted USDC spot pairs")
         if not 0 < D(self.capital) or not 0 < D(self.order_limit) <= D(self.capital):

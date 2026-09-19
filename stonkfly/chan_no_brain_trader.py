@@ -1,5 +1,5 @@
 """纏論無腦交易模組 - 跟著5分K線買賣標記自動交易，使用獨立虛擬帳戶
-全開模式：RSI門檻50、分型預判、冷卻5分鐘、無趨勢過濾
+全開模式：RSI<50才買入、分型預判、冷卻5分鐘、賣出不設RSI過濾
 """
 
 import json
@@ -11,7 +11,7 @@ from decimal import Decimal as D
 class ChanNoBrainTrader:
     """基於纏論買賣信號的無腦交易器，使用獨立帳戶不影響果蠅交易"""
 
-    def __init__(self, state_path: Path, initial_cash: float = 10000.0):
+    def __init__(self, state_path: Path, initial_cash: float = 100.0):
         self.state_path = Path(state_path)
         self.initial_cash = initial_cash
         self.cash = initial_cash
@@ -19,11 +19,11 @@ class ChanNoBrainTrader:
         self.avg_entry = 0.0
         self.trades = []  # 交易記錄
         self.last_signal_time = 0  # 避免重複交易
-        self.cooldown_seconds = 300  # 交易冷卻時間5分鐘（全開模式）
+        self.cooldown_seconds = 60  # 交易冷卻時間5分鐘（全開模式）
         self.last_buy_signal_index = -1  # 最後處理的買入信號index
         self.last_sell_signal_index = -1  # 最後處理的賣出信號index
         self.tick_count = 0  # 啟動後的tick計數
-        self.startup_protection_ticks = 5  # 重開後前5個tick不交易，先觀察
+        self.startup_protection_ticks = 3  # 重開後前5個tick不交易，先觀察
         self.stop_loss_pct = 0.03  # 止損比例3%
         self.stop_loss_price = 0.0  # 止損價格
         self.take_profit_pct = 0.05  # 止盈比例5%
@@ -117,6 +117,17 @@ class ChanNoBrainTrader:
         else:
             return "neutral"
 
+    def _calc_percentile(self, klines):
+        """計算當前價格在近期K線中的百分位（0=最低, 100=最高）"""
+        if len(klines) < 20:
+            return 50.0
+        closes = [float(k.get("c", 0)) for k in klines[-100:]]
+        cur = closes[-1]
+        low = min(closes)
+        high = max(closes)
+        rng = high - low or 1.0
+        return max(0, min(100, (cur - low) / rng * 100))
+
     def process_signal(self, czsc_data: dict, current_price: float):
         """
         處理纏論信號，執行無腦交易（優化版）
@@ -133,10 +144,11 @@ class ChanNoBrainTrader:
         if self.tick_count <= self.startup_protection_ticks:
             return {"action": "STARTUP_PROTECT", "reason": f"啟動觀察中({self.tick_count}/{self.startup_protection_ticks})，先看後動"}
 
-        # 計算RSI和趨勢
+        # 計算RSI、趨勢和價格百分位
         klines = czsc_data.get("klines", [])
         rsi = self._calc_rsi(klines)
         trend = self._calc_trend(klines)
+        percentile = self._calc_percentile(klines)
 
         # ===== 止損/止盈檢查（優先級最高）=====
         if self.position > 0:
@@ -218,19 +230,21 @@ class ChanNoBrainTrader:
         if len(klines) > 0 and latest_index >= len(klines) - 1:
             _fractal_confirmed = False  # 標記為預判分型
 
-        # 無持倉且最新是底分型 → 買入（加入RSI和趨勢過濾）
-        if self.position <= 0 and latest_type == "bottom":
+        # 無持倉：買入條件 = 底分型 OR 價格百分位<20%（接近低點）
+        buy_signal = (latest_type == "bottom")
+        percentile_buy = percentile < 20  # 價格在近100根K線最低20% → 提前買入
+        if self.position <= 0 and (buy_signal or percentile_buy):
             # 避免重複處理同一個信號
-            if latest_index == self.last_buy_signal_index:
+            if buy_signal and latest_index == self.last_buy_signal_index and not percentile_buy:
                 return {"action": "WAIT", "reason": "已處理過此底分型，等待下一個"}
 
-            # RSI過濾：只在RSI較低時買入（超賣區）
-            if rsi > 50:
-                return {"action": "WAIT", "reason": f"底分型但RSI{rsi:.0f}偏高，不買入（全開模式門檻50）"}
+            # RSI過濾：RSI<55才買（放寬一點，配合百分位）
+            if rsi > 55 and not percentile_buy:
+                return {"action": "WAIT", "reason": f"RSI{rsi:.0f}偏高，等待低點（百分位{percentile:.0f}%）"}
 
-            # 全開模式：不做趨勢過濾，下跌趨勢也可以買入（接飛刀模式）
-
-            buy_amount = min(self.cash * 0.95, self.cash)  # 用95%現金買入
+            # 百分位買入用一半倉位，分型買入用全倉
+            buy_pct = 0.5 if percentile_buy and not buy_signal else 0.95
+            buy_amount = min(self.cash * buy_pct, self.cash)
             if buy_amount > 10 and current_price > 0:
                 qty = buy_amount / current_price
                 self.position = qty
@@ -258,19 +272,16 @@ class ChanNoBrainTrader:
                 self.trades.append(trade)
                 self.save()
                 _predict_tag = " [預判]" if not _fractal_confirmed else ""
-                return {"action": "BUY", "price": current_price, "qty": qty, "signal": f"底分型買入(RSI{rsi:.0f}){_predict_tag}", "stop_loss": self.stop_loss_price, "take_profit": self.take_profit_price}
+                return {"action": "BUY", "price": current_price, "qty": qty, "signal": f"{"百分位低點買入" if percentile_buy and not buy_signal else "底分型買入"}(RSI{rsi:.0f} 百分位{percentile:.0f}%){_predict_tag}", "stop_loss": self.stop_loss_price, "take_profit": self.take_profit_price}
 
-        # 有持倉且最新是頂分型 → 賣出（加入RSI過濾）
-        if self.position > 0 and latest_type == "top":
+        # 有持倉：賣出條件 = 頂分型 OR 價格百分位>80%（接近高點）
+        sell_signal = (latest_type == "top")
+        percentile_sell = percentile > 80
+        if self.position > 0 and (sell_signal or percentile_sell):
             # 避免重複處理同一個信號
             if latest_index == self.last_sell_signal_index:
                 unrealized = (current_price - self.avg_entry) * self.position
                 return {"action": "HOLD", "reason": f"已處理過此頂分型，等待下一個，未實現{unrealized:+.2f}"}
-
-            # RSI過濾：只在RSI較高時賣出（超買區）
-            if rsi < 50:
-                unrealized = (current_price - self.avg_entry) * self.position
-                return {"action": "HOLD", "reason": f"頂分型但RSI{rsi:.0f}偏低，不賣出（全開模式門檻50），未實現{unrealized:+.2f}"}
 
             sell_qty = self.position
             sell_amount = sell_qty * current_price
@@ -288,7 +299,7 @@ class ChanNoBrainTrader:
                 "price": current_price,
                 "qty": sell_qty,
                 "amount": sell_amount,
-                "signal": "頂分型賣出",
+                "signal": ("百分位高位賣出" if percentile_sell and not sell_signal else "頂分型賣出"),
                 "signal_index": latest_index,
                 "pnl": pnl,
                 "rsi": round(rsi, 1),
@@ -297,7 +308,7 @@ class ChanNoBrainTrader:
             self.trades.append(trade)
             self.save()
             _predict_tag = " [預判]" if not _fractal_confirmed else ""
-            return {"action": "SELL", "price": current_price, "pnl": pnl, "signal": f"頂分型賣出(RSI{rsi:.0f}){_predict_tag}"}
+            return {"action": "SELL", "price": current_price, "pnl": pnl, "signal": f"{"百分位高位賣出" if percentile_sell and not sell_signal else "頂分型賣出"}(RSI{rsi:.0f} 百分位{percentile:.0f}%){_predict_tag}"}
 
         # 最新分型與持倉狀態不匹配
         if self.position > 0:

@@ -1,4 +1,4 @@
-﻿"""Public Coinbase observations. Synthetic fixtures are explicit test inputs."""
+"""Public Coinbase observations. Synthetic fixtures are explicit test inputs."""
 
 import json
 import math
@@ -147,7 +147,7 @@ class FixtureMarket:
         self.history = {p: [] for p in products}
 
     def snapshot(self):
-        base = {"BTC-USDC": 60000, "ETH-USDC": 2500, "SOL-USDC": 100, "PEPE-USDT": 0.000012, "BTC-USDT": 60000, "BNB-USDT": 580}
+        base = {"BTC-USDT": 60000, "ETH-USDT": 2500, "BNB-USDT": 580, "SOL-USDT": 150, "ZEC-USDT": 1600, "ADA-USDT": 0.5, "AVAX-USDT": 35, "DOT-USDT": 7, "LINK-USDT": 15, "LTC-USDT": 70, "NEAR-USDT": 5, "ATOM-USDT": 8, "ARB-USDT": 1.2, "OP-USDT": 2.5, "INJ-USDT": 25, "SUI-USDT": 1.5, "SEI-USDT": 0.5, "DOGE-USDT": 0.15, "SHIB-USDT": 2.5e-05, "PEPE-USDT": 1.2e-05, "WIF-USDT": 2.5, "FLOKI-USDT": 0.0002, "BONK-USDT": 3e-05}
         quotes = {}
         for j, p in enumerate(self.products):
             price = D(base[p]) * D(1 + 0.025 * math.sin(self.tick * 0.6 + j))
@@ -182,12 +182,7 @@ class BinanceMarket:
         self.products = products
         self.meta = {}
         self.history = {p: [] for p in products}
-        self._symbol_map = {
-            "BTC-USDT": "BTCUSDT", "BNB-USDT": "BNBUSDT",
-            "ETH-USDT": "ETHUSDT",
-            "SOL-USDT": "SOLUSDT",
-            "BTC-USDC": "BTCUSDC",
-        }
+        self._symbol_map = {"BTC-USDT": "BTCUSDT", "ETH-USDT": "ETHUSDT", "BNB-USDT": "BNBUSDT", "SOL-USDT": "SOLUSDT", "ZEC-USDT": "ZECUSDT", "ADA-USDT": "ADAUSDT", "AVAX-USDT": "AVAXUSDT", "DOT-USDT": "DOTUSDT", "LINK-USDT": "LINKUSDT", "LTC-USDT": "LTCUSDT", "NEAR-USDT": "NEARUSDT", "ATOM-USDT": "ATOMUSDT", "ARB-USDT": "ARBUSDT", "OP-USDT": "OPUSDT", "INJ-USDT": "INJUSDT", "SUI-USDT": "SUIUSDT", "SEI-USDT": "SEIUSDT", "DOGE-USDT": "DOGEUSDT", "SHIB-USDT": "SHIBUSDT", "PEPE-USDT": "PEPEUSDT", "WIF-USDT": "WIFUSDT", "FLOKI-USDT": "FLOKIUSDT", "BONK-USDT": "BONKUSDT"}
 
     def _get(self, path, params=None):
         url = f"{self.base_url}{path}"

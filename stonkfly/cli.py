@@ -1,4 +1,4 @@
-﻿"""Single-worker run loop. Default execution is paper; live must be explicit."""
+"""Single-worker run loop. Default execution is paper; live must be explicit."""
 
 import argparse
 import dataclasses
@@ -79,7 +79,7 @@ def main():
     run.add_argument("--live", action="store_true")
     run.add_argument(
         "--exchange",
-        choices=["coinbase", "binance"],
+        choices=["binance", "coinbase"],
         default="coinbase",
         help="Exchange for live trading (default: coinbase)",
     )
@@ -114,12 +114,12 @@ def main():
         "--products",
         nargs="+",
         default=["BTC-USDC"],
-        choices=["BTC-USDC", "ETH-USDC", "SOL-USDC", "PEPE-USDT", "BTC-USDT", "BNB-USDT"],
+        choices=["BTC-USDT", "ETH-USDT", "BNB-USDT", "SOL-USDT", "ZEC-USDT", "ADA-USDT", "AVAX-USDT", "DOT-USDT", "LINK-USDT", "LTC-USDT", "NEAR-USDT", "ATOM-USDT", "ARB-USDT", "OP-USDT", "INJ-USDT", "SUI-USDT", "SEI-USDT", "DOGE-USDT", "SHIB-USDT", "PEPE-USDT", "WIF-USDT", "FLOKI-USDT", "BONK-USDT"],
     )
     run.add_argument("--neural-ms", type=float, default=500)
     run.add_argument("--hz432", action="store_true", help="Enable 432Hz oscillatory stimulation to KC mushroom body neurons")
     run.add_argument("--hz432-current", type=float, default=5.0, help="432Hz stimulation current amplitude (default 5.0)")
-    run.add_argument("--strategy", choices=["none", "martingale", "anti_martingale", "kelly"], default="none",
+    run.add_argument("--strategy", choices=["BTC-USDT", "ETH-USDT", "BNB-USDT", "SOL-USDT", "ZEC-USDT", "ADA-USDT", "AVAX-USDT", "DOT-USDT", "LINK-USDT", "LTC-USDT", "NEAR-USDT", "ATOM-USDT", "ARB-USDT", "OP-USDT", "INJ-USDT", "SUI-USDT", "SEI-USDT", "DOGE-USDT", "SHIB-USDT", "PEPE-USDT", "WIF-USDT", "FLOKI-USDT", "BONK-USDT"], default="none",
                      help="Position sizing strategy: none (fixed), martingale (double after loss), anti_martingale (double after win), kelly")
     run.add_argument(
         "--take-profit",
@@ -301,13 +301,13 @@ def main():
         ledger.put("provenance_sha256", signature)
         (out / "provenance.json").write_text(json.dumps(provenance, indent=2) + "\n")
         guard = Guard(settings, ledger, out / "STOP")
-        strategy = StrategyState(name=getattr(a, "strategy", "none"), base_budget=100000.0)
+        strategy = StrategyState(name=getattr(a, "strategy", "none"), base_budget=100.0)
         chan_strategy = None
         chan_observations = 0  # 果蠅觀察纏論交易次數
         chan_imitation_correct = 0  # 果蠅自然決策與纏論一致次數
         if getattr(a, "chan_auto", False):
             from .chan_strategy import ChanAutoStrategy
-            chan_strategy = ChanAutoStrategy(symbol="BTCUSDT", cooldown_seconds=60)
+            chan_strategy = ChanAutoStrategy(symbol="ZECUSDT", cooldown_seconds=60)
             # Sync strategy position with ledger on startup
             try:
                 _product = settings.products[0] if settings.products else None
@@ -334,7 +334,7 @@ def main():
         web_learner.save_path = out / "chanlun_web_learning.json"
         web_learner.state = web_learner._load_state()
         _web_study_counter = 0
-        no_brain_trader = ChanNoBrainTrader(out / "no_brain_state.json", initial_cash=10000.0)
+        no_brain_trader = ChanNoBrainTrader(out / "no_brain_state.json", initial_cash=100.0)
         provider = StonkflyActions(guard, broker)
         action = provider.get_actions()[0]
         count = 0
@@ -435,16 +435,16 @@ def main():
             # CZSC 缠论 analysis - fruit fly learns technical analysis skills
             czsc_analysis = analyze_czsc(market.history[product])
 
-            # 無腦交易：基於纏論15分K線買賣標記自動交易（獨立帳戶）
+            # 無腦交易：基於纏論5分K線買賣標記自動交易（獨立帳戶）
             try:
-                # 從幣安API獲取15分K線數據
+                # 從幣安API獲取5分K線數據
                 import urllib.request as _ur
-                _nb_url = "https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=15m&limit=200"
+                _nb_url = "https://api.binance.com/api/v3/klines?symbol=ZECUSDT&interval=5m&limit=200"
                 _nb_req = _ur.Request(_nb_url, headers={"User-Agent": "Mozilla/5.0"})
                 with _ur.urlopen(_nb_req, timeout=10) as _nb_resp:
                     _nb_raw = json.loads(_nb_resp.read().decode("utf-8"))
                 _klines_for_nb = [{"t": k[0], "o": float(k[1]), "h": float(k[2]), "l": float(k[3]), "c": float(k[4]), "v": float(k[5])} for k in _nb_raw]
-                _czsc_struct = extract_czsc_structures(_klines_for_nb, freq="15m")
+                _czsc_struct = extract_czsc_structures(_klines_for_nb, freq="1m")
                 _czsc_struct["klines"] = _klines_for_nb  # 傳入K線數據用於預測分型
                 _current_price = float(q.bid) if q and hasattr(q, 'bid') else 0.0
                 _nb_result = no_brain_trader.process_signal(_czsc_struct, _current_price)

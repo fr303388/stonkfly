@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
 <meta charset="UTF-8">
@@ -592,7 +592,7 @@
   <!-- Binance K-line Candlestick Chart -->
 <div class="panel kline-panel" style="margin:0;flex:1;min-width:0;">
   <div class="panel-header">
-    <span><span class="icon">📈</span>Binance BTC/USDT K 線
+    <span><span class="icon">📈</span>Binance ZEC/USDT K 線
       <button class="tf-btn active" onclick="setTimeframe('1m')" id="tf1m">1分</button>
       <button class="tf-btn" onclick="setTimeframe('5m')" id="tf5m">5分</button>
       <button class="tf-btn" onclick="setTimeframe('15m')" id="tf15m">15分</button>
@@ -632,7 +632,7 @@
   <!-- Depth Chart -->
   <div class="panel depth-panel" style="margin:0;width:340px;flex-shrink:0;margin-left:auto;">
     <div class="panel-header">
-      <span><span class="icon">📊</span>訂單簿深度 · BTC/USDT</span>
+      <span><span class="icon">📊</span>訂單簿深度 · ZEC/USDT</span>
       <span style="font-size:10px;color:var(--dim)" id="depthStatus">連接中…</span>
     </div>
     <div id="depthAsks" style="min-height:190px;"></div>
@@ -671,7 +671,7 @@
         <span id="pnlCash" style="font-size:22px;font-weight:900;color:#fff;font-family:'JetBrains Mono',monospace;">--</span>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:baseline;">
-        <span style="font-size:11px;color:var(--dim);letter-spacing:1px;">📦 BTC持倉</span>
+        <span style="font-size:11px;color:var(--dim);letter-spacing:1px;">📦 ZEC持倉</span>
         <span id="pnlPosition" style="font-size:22px;font-weight:900;color:#00d2d3;font-family:'JetBrains Mono',monospace;">--</span>
       </div>
     </div>
@@ -1136,7 +1136,7 @@ function drawEyeChart() {
   const last = data[data.length - 1];
   ctx.fillStyle = '#4dd0e1';
   ctx.font = '11px "JetBrains Mono", monospace';
-  ctx.fillText('BTC $' + last.c.toFixed(2), pad, 14);
+  ctx.fillText('ZEC $' + last.c.toFixed(2), pad, 14);
   document.getElementById('eyePrice').textContent = 'BID ' + last.c.toFixed(2) + '  ASK ' + (last.c * 1.0001).toFixed(2);
 }
 
@@ -2198,7 +2198,7 @@ async function fetchKlines() {
       if (state) {
         const meta = state.meta || {};
         const equity = parseFloat(state.latest ? state.latest.equity_usdc : 0) || 0;
-        const initial = parseFloat(meta.initial_cash || 1000);
+        const initial = parseFloat(meta.initial_cash || 100);
         updatePnL(meta, equity, initial);
       }
     }
@@ -2220,7 +2220,7 @@ async function fetchTokenInfo() {
       if (state) {
         const meta = state.meta || {};
         const equity = parseFloat(state.latest ? state.latest.equity_usdc : 0) || 0;
-        const initial = parseFloat(meta.initial_cash || 1000);
+        const initial = parseFloat(meta.initial_cash || 100);
         updatePnL(meta, equity, initial);
       }
     }
@@ -2241,7 +2241,7 @@ async function fetch1mPrice() {
       if (state) {
         const meta = state.meta || {};
         const equity = parseFloat(state.latest ? state.latest.equity_usdc : 0) || 0;
-        const initial = parseFloat(meta.initial_cash || 1000);
+        const initial = parseFloat(meta.initial_cash || 100);
         updatePnL(meta, equity, initial);
       }
     }
@@ -2254,7 +2254,7 @@ function updatePnL(meta, simEquity, initial) {
   // Get position amount
   let btcAmount = 0;
   for (const [product, amount] of Object.entries(positions)) {
-    if (product.startsWith('BTC') || product.startsWith('BNB') || product.startsWith('PEPE')) btcAmount += parseFloat(amount) || 0;
+    btcAmount += parseFloat(amount) || 0;
   }
   // Use simulation real-time quote bid price
   const simQuote = (state && state.latest && state.latest.quote) ? state.latest.quote : {};
@@ -2267,7 +2267,7 @@ function updatePnL(meta, simEquity, initial) {
   const flyTotalPnl = flyEquity - initial;
   // 無腦交易盈虧（從no_brain_state獲取）
   const nbState = (state && state.no_brain_state) ? state.no_brain_state : {};
-  const nbInitial = 10000; // 無腦交易初始資金
+  const nbInitial = 100; // 無腦交易初始資金
   const nbCash = parseFloat(nbState.cash || 0);
   const nbPos = parseFloat(nbState.position || 0);
   const nbEquityFromState = parseFloat(nbState.equity || 0);
@@ -2411,8 +2411,8 @@ function updateUI() {
   const flyCashTop = meta.cash ? parseFloat(meta.cash) : 0;
   const totalCashTop = flyCashTop + nbCashTop;
   document.getElementById('cash').textContent = '$' + totalCashTop.toLocaleString('en-US', {maximumFractionDigits: 2});
-  const flyInitial = parseFloat(meta.initial_cash || 1000);
-  const displayInitial = flyInitial + 10000; // 顯示用：果蠅+無腦總和
+  const flyInitial = parseFloat(meta.initial_cash || 100);
+  const displayInitial = flyInitial + 100; // 顯示用：果蠅+無腦總和
   document.getElementById('initialCash').textContent = '$' + displayInitial.toLocaleString('en-US', {maximumFractionDigits: 0});
   document.getElementById('totalSpikes').textContent = (neural.total_spikes || 0).toLocaleString();
   document.getElementById('brainMs').textContent = (neural.brain_ms || 0).toFixed(0) + 'ms';
@@ -2646,7 +2646,7 @@ function updatePnlSummary(tab) {
   const meta = state.meta || {};
   const flyCash = parseFloat(meta.cash || 0);
   const flyPositions = meta.positions || {};
-  const flyBtc = parseFloat(flyPositions['BTC-USDT'] || 0);
+  const flyBtc = parseFloat(flyPositions['ZEC-USDT'] || 0);
   let flyAvg = parseFloat(meta.avg_entry_price || latest.neural?.avg_entry || 0);
   if (flyAvg <= 0 && flyBtc > 0) {
     const filled = (state.events || []).filter(ev => ev.execution && ev.execution.status === 'FILLED');
@@ -2680,10 +2680,10 @@ function updatePnlSummary(tab) {
   // === 顯示 ===
   if (tab === 'fly') {
     cashEl.textContent = '$' + flyCash.toLocaleString('en-US', {maximumFractionDigits: 2});
-    posEl.textContent = flyBtc.toFixed(4) + ' BTC';
+    posEl.textContent = flyBtc.toFixed(4) + ' ZEC';
   } else {
     cashEl.textContent = '$' + nbCash.toLocaleString('en-US', {maximumFractionDigits: 2});
-    posEl.textContent = nbBtc.toFixed(6) + ' BTC';
+    posEl.textContent = nbBtc.toFixed(6) + ' ZEC';
   }
   // 果蠅盈虧
   if (flyTotalEl) {
@@ -3102,7 +3102,8 @@ function updateWatchdog() {
 }
 
 // ============ SIMULATION TIMER ============
-let simStartTime = Date.now();
+let simStartTime = parseInt(localStorage.getItem('stonkfly_start_time') || '0') || Date.now();
+localStorage.setItem('stonkfly_start_time', simStartTime);
 setInterval(() => {
   const elapsed = Math.floor((Date.now() - simStartTime) / 1000);
   const h = String(Math.floor(elapsed / 3600)).padStart(2, '0');
@@ -3237,7 +3238,7 @@ function renderDepth() {
     return '<div class="depth-row depth-ask">' +
       '<div class="depth-bar" style="width:' + pct + '%;"></div>' +
       '<span class="depth-price">' + a[0].toFixed(2) + '</span>' +
-      '<span class="depth-qty">' + a[1].toFixed(6) + ' BTC</span></div>';
+      '<span class="depth-qty">' + a[1].toFixed(4) + ' ZEC</span></div>';
   }).join('');
 
   // Bids (cyan, bottom)
@@ -3246,7 +3247,7 @@ function renderDepth() {
     return '<div class="depth-row depth-bid">' +
       '<div class="depth-bar" style="width:' + pct + '%;"></div>' +
       '<span class="depth-price">' + b[0].toFixed(2) + '</span>' +
-      '<span class="depth-qty">' + b[1].toFixed(6) + ' BTC</span></div>';
+      '<span class="depth-qty">' + b[1].toFixed(4) + ' ZEC</span></div>';
   }).join('');
 
   // Buy/Sell ratio

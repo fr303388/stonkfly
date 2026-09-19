@@ -1,8 +1,8 @@
-﻿"""Professional Stonkfly monitor with 3D brain visualization.
+"""Professional Stonkfly monitor with 3D brain visualization.
 
 Features:
 - Three.js 3D point cloud of all 166,700 neurons at actual MaleCNS coordinates
-- Binance BTCUSDT 1-minute klines
+- Binance ZECUSDT 1-minute klines
 - Photoreceptor overlay on price chart
 - 6-step process flow, decision panel, feedback panel
 - Color by region, rotation controls, slow-motion firing animation
@@ -278,12 +278,12 @@ def _load_brain_summary():
 
 
 def _fetch_binance(interval="1m", limit=200):
-    """Fetch Binance BTCUSDT klines."""
+    """Fetch Binance ZECUSDT klines."""
     global _binance_cache
     now = time.time()
     if interval in _binance_cache and now - _binance_cache[interval]["time"] < 3:
         return _binance_cache[interval]["data"]
-    url = f"https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval={interval}&limit={limit}"
+    url = f"https://api.binance.com/api/v3/klines?symbol=ZECUSDT&interval={interval}&limit={limit}"
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=10) as resp:
@@ -296,19 +296,19 @@ def _fetch_binance(interval="1m", limit=200):
 
 
 def _fetch_token_info():
-    """Fetch BTCUSDT 24hr ticker from Binance."""
+    """Fetch ZECUSDT 24hr ticker from Binance."""
     global _token_cache
     now = time.time()
     if _token_cache["data"] and now - _token_cache["time"] < 5:
         return _token_cache["data"]
     try:
-        url = "https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT"
+        url = "https://api.binance.com/api/v3/ticker/24hr?symbol=ZECUSDT"
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=10) as resp:
             d = json.loads(resp.read().decode("utf-8"))
         info = {
             "price": float(d["lastPrice"]),
-            "symbol": "BTC",
+            "symbol": "ZEC",
             "quote": "USDT",
             "price_change": {"h24": float(d["priceChangePercent"]), "h1": 0, "m5": 0},
             "volume": {"h24": float(d["quoteVolume"])},
@@ -396,13 +396,13 @@ _depth_cache = {"time": 0, "data": None}
 
 @app.route("/api/depth")
 def api_depth():
-    """Fetch Binance BTCUSDT order book depth."""
+    """Fetch Binance ZECUSDT order book depth."""
     global _depth_cache
     now = time.time()
     if _depth_cache["data"] and now - _depth_cache["time"] < 1:
         return jsonify(_depth_cache["data"])
     try:
-        url = "https://api.binance.com/api/v3/depth?symbol=BTCUSDT&limit=20"
+        url = "https://api.binance.com/api/v3/depth?symbol=ZECUSDT&limit=20"
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=5) as resp:
             raw = json.loads(resp.read().decode("utf-8"))
