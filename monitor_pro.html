@@ -1346,6 +1346,106 @@ function drawKlineChart() {
     ctx.fillRect(x - cw * 0.35, padT + priceH + 6 + (volH - vh), cw * 0.7, vh);
   });
 
+  // === Bollinger Bands (20, 2) ===
+  function calcSMA(arr, period) {
+    if (arr.length < period) return null;
+    return arr.slice(-period).reduce((a,b) => a+b, 0) / period;
+  }
+  function calcStd(arr, period, mid) {
+    if (arr.length < period) return null;
+    const slice = arr.slice(-period);
+    const variance = slice.reduce((s,v) => s + (v - mid)**2, 0) / period;
+    return Math.sqrt(variance);
+  }
+  const closes = data.map(k => k.c);
+  const bbPeriod = 20;
+  if (closes.length >= bbPeriod) {
+    // Draw BB bands
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(168,85,247,0.5)';
+    for (let i = bbPeriod - 1; i < data.length; i++) {
+      const slice = closes.slice(i - bbPeriod + 1, i + 1);
+      const mid = slice.reduce((a,b) => a+b, 0) / bbPeriod;
+      const std = Math.sqrt(slice.reduce((s,v) => s + (v - mid)**2, 0) / bbPeriod);
+      const upper = mid + 2 * std;
+      const lower = mid - 2 * std;
+      const x = padL + cw * i + cw / 2;
+      const yU = padT + (max - upper) / range * priceH;
+      const yL = padT + (max - lower) / range * priceH;
+      if (i === bbPeriod - 1) { ctx.beginPath(); ctx.moveTo(x, yU); }
+      else { ctx.lineTo(x, yU); }
+    }
+    ctx.stroke();
+    // Lower band
+    ctx.strokeStyle = 'rgba(168,85,247,0.5)';
+    ctx.beginPath();
+    for (let i = bbPeriod - 1; i < data.length; i++) {
+      const slice = closes.slice(i - bbPeriod + 1, i + 1);
+      const mid = slice.reduce((a,b) => a+b, 0) / bbPeriod;
+      const std = Math.sqrt(slice.reduce((s,v) => s + (v - mid)**2, 0) / bbPeriod);
+      const lower = mid - 2 * std;
+      const x = padL + cw * i + cw / 2;
+      const yL = padT + (max - lower) / range * priceH;
+      if (i === bbPeriod - 1) ctx.moveTo(x, yL);
+      else ctx.lineTo(x, yL);
+    }
+    ctx.stroke();
+    // Middle band
+    ctx.strokeStyle = 'rgba(168,85,247,0.3)';
+    ctx.setLineDash([2, 3]);
+    ctx.beginPath();
+    for (let i = bbPeriod - 1; i < data.length; i++) {
+      const slice = closes.slice(i - bbPeriod + 1, i + 1);
+      const mid = slice.reduce((a,b) => a+b, 0) / bbPeriod;
+      const x = padL + cw * i + cw / 2;
+      const yM = padT + (max - mid) / range * priceH;
+      if (i === bbPeriod - 1) ctx.moveTo(x, yM);
+      else ctx.lineTo(x, yM);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // === EMA lines (12, 26) ===
+  function calcEMA(arr, period) {
+    if (arr.length < period) return [];
+    const k = 2 / (period + 1);
+    const result = [];
+    let ema = arr.slice(0, period).reduce((a,b) => a+b, 0) / period;
+    result.push(ema);
+    for (let i = period; i < arr.length; i++) {
+      ema = arr[i] * k + ema * (1 - k);
+      result.push(ema);
+    }
+    return result;
+  }
+  const ema12 = calcEMA(closes, 12);
+  const ema26 = calcEMA(closes, 26);
+  if (ema12.length > 0) {
+    ctx.strokeStyle = 'rgba(254,211,48,0.9)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ema12.forEach((v, j) => {
+      const i = j + 11; // offset for period
+      const x = padL + cw * i + cw / 2;
+      const y = padT + (max - v) / range * priceH;
+      if (j === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+  }
+  if (ema26.length > 0) {
+    ctx.strokeStyle = 'rgba(0,210,211,0.9)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ema26.forEach((v, j) => {
+      const i = j + 25;
+      const x = padL + cw * i + cw / 2;
+      const y = padT + (max - v) / range * priceH;
+      if (j === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+  }
+
   // Current price line
   const lastC = data[data.length - 1].c;
   const yLast = padT + (max - lastC) / range * priceH;
@@ -1906,6 +2006,15 @@ function initTvChart() {
     });
     tvChart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
   } catch(e) { console.warn('volume series init error', e); }
+  // EMA lines
+  try {
+    window._ema12Series = tvChart.addLineSeries({ color: '#fed330', lineWidth: 2, priceLineVisible: false, lastValueVisible: false });
+    window._ema26Series = tvChart.addLineSeries({ color: '#00d2d3', lineWidth: 2, priceLineVisible: false, lastValueVisible: false });
+    window._bbUpperSeries = tvChart.addLineSeries({ color: 'rgba(168,85,247,0.7)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
+    window._bbLowerSeries = tvChart.addLineSeries({ color: 'rgba(168,85,247,0.7)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
+    window._bbMidSeries = tvChart.addLineSeries({ color: 'rgba(168,85,247,0.4)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
+  } catch(e) { window._ema12Series=null; window._ema26Series=null; window._bbUpperSeries=null; window._bbLowerSeries=null; window._bbMidSeries=null; }
+
   // Chan stroke series created dynamically per-stroke in updateTvChart
   // Redraw pivot overlay on scroll/zoom
   try {
@@ -1948,6 +2057,33 @@ function updateTvChart(data, czscStructures, state) {
     }));
     tvCandleSeries.setData(candles);
     czscKlineData = displayData;
+
+    try {
+      const closes = displayData.map(k => k.c);
+      const timesArr = displayData.map(k => Math.floor(k.t / 1000));
+      if (window._ema12Series && closes.length >= 12) {
+        const k12 = 2/13; let ema = closes.slice(0,12).reduce((a,b)=>a+b,0)/12;
+        const r = [{time:timesArr[11],value:ema}];
+        for(let i=12;i<closes.length;i++){ema=closes[i]*k12+ema*(1-k12);r.push({time:timesArr[i],value:ema});}
+        window._ema12Series.setData(r);
+      }
+      if (window._ema26Series && closes.length >= 26) {
+        const k26 = 2/27; let ema = closes.slice(0,26).reduce((a,b)=>a+b,0)/26;
+        const r = [{time:timesArr[25],value:ema}];
+        for(let i=26;i<closes.length;i++){ema=closes[i]*k26+ema*(1-k26);r.push({time:timesArr[i],value:ema});}
+        window._ema26Series.setData(r);
+      }
+      if (window._bbUpperSeries && closes.length >= 20) {
+        const up=[],mi=[],lo=[];
+        for(let i=19;i<closes.length;i++){
+          const s=closes.slice(i-19,i+1);const m=s.reduce((a,b)=>a+b,0)/20;
+          const sd=Math.sqrt(s.reduce((x,v)=>x+(v-m)**2,0)/20);
+          up.push({time:timesArr[i],value:m+2*sd});mi.push({time:timesArr[i],value:m});lo.push({time:timesArr[i],value:m-2*sd});
+        }
+        window._bbUpperSeries.setData(up);window._bbMidSeries.setData(mi);window._bbLowerSeries.setData(lo);
+      }
+    } catch(e) { console.warn('ind calc err', e); }
+
     setTimeout(drawPivotOverlay, 50);
     setTimeout(updateTPLines, 150);
 
@@ -2447,20 +2583,23 @@ function updatePnL(meta, simEquity, initial) {
   const unrealized = nbUnrealized; // 果蠅無持倉時就是0
   const roi = initial > 0 ? (totalPnl / (initial + nbInitial) * 100) : 0;
 
-  // 勝率統計：從trades計算已平倉交易
-  const sellTrades = trades.filter(t => t.side === 'SELL' && t.pnl !== undefined && t.pnl !== null);
-  const wins = sellTrades.filter(t => t.pnl > 0).length;
-  const losses = sellTrades.filter(t => t.pnl <= 0).length;
-  const winRate = sellTrades.length > 0 ? (wins / sellTrades.length * 100) : 0;
-  const avgWin = wins > 0 ? sellTrades.filter(t => t.pnl > 0).reduce((s,t) => s + t.pnl, 0) / wins : 0;
-  const avgLoss = losses > 0 ? sellTrades.filter(t => t.pnl <= 0).reduce((s,t) => s + t.pnl, 0) / losses : 0;
-  const winRateEl = document.getElementById('winRate');
-  if (winRateEl) {
-    winRateEl.textContent = sellTrades.length > 0
-      ? `勝率 ${winRate.toFixed(0)}% (${wins}勝${losses}敗) 均賺$${avgWin.toFixed(2)}/均賠$${avgLoss.toFixed(2)}`
-      : '等待首次賣出...';
-    winRateEl.style.color = winRate >= 50 ? 'var(--green)' : 'var(--red)';
-  }
+  // 勝率統計（需有trades變數才計算）
+  try {
+    const _trades = (typeof trades !== 'undefined') ? trades : (state.events || []).filter(ev => ev.execution && ev.execution.status === 'FILLED');
+    const sellTrades = _trades.filter(t => t.side === 'SELL' && t.pnl !== undefined && t.pnl !== null);
+    const wins = sellTrades.filter(t => t.pnl > 0).length;
+    const losses = sellTrades.filter(t => t.pnl <= 0).length;
+    const winRate = sellTrades.length > 0 ? (wins / sellTrades.length * 100) : 0;
+    const avgWin = wins > 0 ? sellTrades.filter(t => t.pnl > 0).reduce((s,t) => s + t.pnl, 0) / wins : 0;
+    const avgLoss = losses > 0 ? sellTrades.filter(t => t.pnl <= 0).reduce((s,t) => s + t.pnl, 0) / losses : 0;
+    const winRateEl = document.getElementById('winRate');
+    if (winRateEl) {
+      winRateEl.textContent = sellTrades.length > 0
+        ? `勝率 ${winRate.toFixed(0)}% (${wins}勝${losses}敗) 均賺$${avgWin.toFixed(2)}/均賠$${avgLoss.toFixed(2)}`
+        : '等待首次賣出...';
+      winRateEl.style.color = winRate >= 50 ? 'var(--green)' : 'var(--red)';
+    }
+  } catch(e) { console.warn('winrate error', e); }
 
   // Position value (fly + no_brain)
   const posValue = btcAmount > 0 ? btcAmount * markPrice : 0;

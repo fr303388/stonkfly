@@ -700,7 +700,7 @@ def main():
 
             # === Trailing Stop: track highest price since buy ===
             if has_position and avg_entry_price > 0:
-                if not hasattr(self, '_trailing_peak') or trailing_peak is None:
+                if trailing_peak is None:
                     trailing_peak = current_price
                 trailing_peak = max(trailing_peak, current_price)
             else:
