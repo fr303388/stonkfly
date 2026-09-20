@@ -464,8 +464,9 @@ def main():
             else:
                 price_percentile = 50.0
 
-            # === 震盪盤識別：最近20根K線波動率 < 1% 視為震盪盤 ===
+            # === 震盪盤識別 + ATR計算 ===
             _is_ranging = False
+            _atr_pct = 1.5  # 預設1.5%波動
             try:
                 _recent_prices = np.asarray(market.history[product][-20:], dtype=float)
                 if len(_recent_prices) >= 10:
@@ -474,6 +475,10 @@ def main():
                     _avg = float(np.mean(_recent_prices))
                     _volatility = (_h - _l) / _avg * 100 if _avg > 0 else 100
                     _is_ranging = _volatility < 1.0
+                    # ATR近似：最近20根的平均真實波幅百分比
+                    _diffs = np.abs(np.diff(_recent_prices))
+                    _atr_pct = float(np.mean(_diffs) / _avg * 100) if _avg > 0 else 1.5
+                    if _atr_pct < 0.3: _atr_pct = 0.3  # 最低0.3%
             except Exception:
                 pass
             frame = market_frame(product, market.history[product], q.bid, q.ask, macd=macd, strategy=strategy.to_dict(), czsc=czsc_obs)
@@ -532,9 +537,9 @@ def main():
             # [果蠅參考纏論指標自主決策] 果蠅參考纏論數據後自己判斷買賣
             # 全局冷卻：賣出後15分鐘內不再買入（避免追高），買入後5分鐘內不再交易
             if last_trade_side == "SELL":
-                _global_cooldown = 1800 if _is_ranging else 900  # 震盪盤賣出後冷卻30分鐘，避免追高
+                _global_cooldown = 300  # 賣出後5分鐘冷卻（避免追高但不錯過機會）
             else:
-                _global_cooldown = 300  # 買入後冷卻5分鐘
+                _global_cooldown = 0  # 買入後不全局冷卻（加倉由_add_cooldown控制）
             _time_since_trade = time.time() - last_trade_time if last_trade_time > 0 else 9999
             _in_cooldown = _time_since_trade < _global_cooldown
 
@@ -680,6 +685,27 @@ def main():
             neural["decision_note"] = "神經觀察中"
 
             rsi_val = rsi_latest
+
+            # === Bollinger Bands (20, 2) ===
+            _bb_upper = _bb_mid = _bb_lower = None
+            try:
+                _bb_prices = np.asarray(market.history[product][-20:], dtype=float)
+                if len(_bb_prices) >= 15:
+                    _bb_mid = float(np.mean(_bb_prices))
+                    _bb_std = float(np.std(_bb_prices))
+                    _bb_upper = _bb_mid + 2 * _bb_std
+                    _bb_lower = _bb_mid - 2 * _bb_std
+            except Exception:
+                pass
+
+            # === Trailing Stop: track highest price since buy ===
+            if has_position and avg_entry_price > 0:
+                if not hasattr(self, '_trailing_peak') or trailing_peak is None:
+                    trailing_peak = current_price
+                trailing_peak = max(trailing_peak, current_price)
+            else:
+                trailing_peak = None
+
             czsc_dir = czsc_analysis.get("last_bi_direction", "unknown")
             czsc_bull = czsc_analysis.get("bullish_score", 50)
             czsc_bear = czsc_analysis.get("bearish_score", 50)
@@ -715,8 +741,10 @@ def main():
 
             # PRIMARY: RSI overbought (>=70) + CZSC confirmation → SELL
             # Learning boost: if fly mastered sell points (>=50%), accept RSI>=65
-            rsi_sell_thresh = 55 if sell_conf >= 50 else 60
-            if rsi_val is not None and rsi_val >= rsi_sell_thresh and has_position and trade_cooldown == 0:
+            rsi_sell_thresh = 70 if sell_conf >= 50 else 75
+            # 虧損時不賣出（交給止損）
+            _sell_pnl_pct = ((current_price - avg_entry_price) / avg_entry_price * 100) if (has_position and avg_entry_price > 0) else 0
+            if rsi_val is not None and rsi_val >= rsi_sell_thresh and has_position and trade_cooldown == 0 and _sell_pnl_pct > 0:
                 czsc_ok = czsc_bear > czsc_bull or czsc_dir == "down"
                 # If learning is low (<20%), require stronger CZSC advantage
                 if sell_conf < 20:
@@ -811,33 +839,85 @@ def main():
             # VISUAL: Photoreceptor input - high point sell all, low point batch entry
             if neural["side"] == "HOLD" and trade_cooldown == 0:
                 current_position = float(ledger.positions.get(product, 0)) if has_position else 0.0
-                # Batch entry at lows: lower price = bigger buy
-                if price_percentile <= 5 and current_position < 1.0:
+                # 加倉冷卻：距離上次買入至少5分鐘，且價格下跌至少1%才加倉
+                _add_cooldown_ok = (time.time() - last_buy_time) > 1800 if last_buy_time > 0 else True
+                _add_price_drop = False
+                if last_buy_time > 0 and avg_entry_price > 0:
+                    _add_price_drop = (current_price - avg_entry_price) / avg_entry_price * 100 < -1.0
+                # Batch entry at lows: lower price = bigger buy (only if cooldown OK or first buy)
+                if price_percentile <= 5 and current_position < 1.0 and (_add_cooldown_ok or current_position < 0.1):
                     neural["side"] = "BUY"
-                    neural["batch_size"] = 0.3  # Third batch at extreme low
+                    neural["batch_size"] = 0.3
                     neural["decision_note"] = generate_buy_reason(
                         rsi=rsi_val, czsc=czsc_analysis, price_percentile=price_percentile,
                         neural_gate=neural_gate, neural_diff=neural_right-neural_left,
                         practical_skill="bottom_fractal", has_position=has_position
-                    ) + f" [視覺觸底 第3批 {neural['batch_size']}BTC]"
-                elif price_percentile <= 10 and current_position < 0.7:
+                    ) + f" [視覺觸底 第3批 {neural['batch_size']}{product.split('-')[0]}]"
+                elif price_percentile <= 10 and current_position < 0.7 and (_add_cooldown_ok or current_position < 0.1):
                     neural["side"] = "BUY"
-                    neural["batch_size"] = 0.3  # Second batch at very low
+                    neural["batch_size"] = 0.3
                     neural["decision_note"] = generate_buy_reason(
                         rsi=rsi_val, czsc=czsc_analysis, price_percentile=price_percentile,
                         neural_gate=neural_gate, neural_diff=neural_right-neural_left,
                         practical_skill="bottom_fractal", has_position=has_position
-                    ) + f" [視覺觸底 第2批 {neural['batch_size']}BTC]"
-                elif price_percentile <= 20 and current_position < 0.4:
+                    ) + f" [視覺觸底 第2批 {neural['batch_size']}{product.split('-')[0]}]"
+                elif price_percentile <= 20 and current_position < 0.4 and (_add_cooldown_ok or current_position < 0.1):
                     neural["side"] = "BUY"
-                    neural["batch_size"] = 0.4  # First batch at low
+                    neural["batch_size"] = 0.4
                     neural["decision_note"] = generate_buy_reason(
                         rsi=rsi_val, czsc=czsc_analysis, price_percentile=price_percentile,
                         neural_gate=neural_gate, neural_diff=neural_right-neural_left,
                         practical_skill="bottom_fractal", has_position=has_position
                     ) + f" [視覺觸底 第1批 {neural['batch_size']}{product.split('-')[0]}]"
-                # High point: sell all
-                elif price_percentile >= 90 and has_position:
+                # 移動止盈：從最高點回落1%就賣出（TP賣出後鎖利）
+                if has_position and avg_entry_price > 0 and trailing_peak and tp_stage >= 1:
+                    _peak = trailing_peak
+                    _pullback = (_peak - current_price) / _peak * 100 if _peak > 0 else 0
+                    if _pullback >= 1.0 and current_price > avg_entry_price:
+                        neural["side"] = "SELL"
+                        neural["sell_pct"] = 1.0
+                        neural["decision_note"] = f"[移動止盈] 從最高點${_peak:.2f}回落{_pullback:.2f}%，鎖利出場"
+                        tp_stage = 3
+
+                # MACD 死叉賣出：hist 由正轉負
+                if has_position and neural["side"] == "HOLD" and macd_latest.get("hist") is not None:
+                    _hist = macd_latest["hist"]
+                    if _hist < 0 and current_price > avg_entry_price:
+                        neural["side"] = "SELL"
+                        neural["sell_pct"] = 1.0
+                        neural["decision_note"] = f"[MACD死叉] 柱狀圖{_hist:.4f}轉負，趨勢轉弱賣出"
+
+                # BB 觸上軌賣出
+                if has_position and neural["side"] == "HOLD" and _bb_upper and current_price >= _bb_upper and rsi_val and rsi_val >= 60:
+                    neural["side"] = "SELL"
+                    neural["sell_pct"] = 0.3
+                    neural["decision_note"] = f"[BB上軌] 價格${current_price:.2f}觸及布林上軌${_bb_upper:.2f} RSI{rsi_val:.0f}，減倉30%"
+
+                # 分批止盈：TP1減30% TP2減30% TP3減40%
+                elif has_position and avg_entry_price > 0:
+                    _tp1_price = avg_entry_price * 1.005
+                    _tp2_price = avg_entry_price * 1.010
+                    _tp3_price = avg_entry_price * 1.015
+                    _pos_qty = float(ledger.positions.get(product, 0))
+                    if _pos_qty <= 0.001:
+                        pass
+                    elif current_price >= _tp3_price and tp_stage < 3:
+                        neural["side"] = "SELL"
+                        neural["sell_pct"] = 1.0  # sell all remaining
+                        tp_stage = 3
+                        neural["decision_note"] = f"[TP3止盈] 價格${current_price:.2f} 達TP3 ${_tp3_price:.2f}，賣出剩餘40%"
+                    elif current_price >= _tp2_price and tp_stage < 2:
+                        neural["side"] = "SELL"
+                        neural["sell_pct"] = 0.3  # sell 30%
+                        tp_stage = 2
+                        neural["decision_note"] = f"[TP2止盈] 價格${current_price:.2f} 達TP2 ${_tp2_price:.2f}，減倉30%"
+                    elif current_price >= _tp1_price and tp_stage < 1:
+                        neural["side"] = "SELL"
+                        neural["sell_pct"] = 0.3  # sell 30%
+                        tp_stage = 1
+                        neural["decision_note"] = f"[TP1止盈] 價格${current_price:.2f} 達TP1 ${_tp1_price:.2f}，減倉30%"
+                # 大紅K逃頂：RSI>70且價格百分位>=90，全數賣出
+                elif price_percentile >= 90 and has_position and rsi_val and rsi_val >= 70:
                     neural["side"] = "SELL"
                     neural["decision_note"] = generate_sell_reason(
                         rsi=rsi_val, czsc=czsc_analysis, price_percentile=price_percentile,
@@ -866,16 +946,17 @@ def main():
             # === 震盪盤優化：提高買賣門檻 + 止損 + 最小盈利目標 ===
             if _is_ranging:
                 _ranging_note = " [震盪盤模式]"
-                # 止損：持倉虧損超過1.5%自動賣出
+                # ATR止損：虧損超過2倍ATR自適應止損
                 if has_position and avg_entry_price > 0:
                     _stop_loss_pct = (current_price - avg_entry_price) / avg_entry_price * 100
-                    if _stop_loss_pct <= -1.5:
+                    _stop_threshold = -2.0 * _atr_pct  # 2倍ATR
+                    if _stop_loss_pct <= _stop_threshold:
                         neural["side"] = "SELL"
-                        neural["decision_note"] = f"[震盪盤止損] 虧損{_stop_loss_pct:.2f}%觸發止損線(-1.5%)，全數出清{_ranging_note}"
+                        neural["decision_note"] = f"[ATR止損] 虧損{_stop_loss_pct:.2f}%觸發止損線(-{_stop_threshold:.2f}%={2.0}xATR{_atr_pct:.2f}%)，全數出清{_ranging_note}"
                 # 最小盈利目標：盈利不到0.2%不觸發高點賣出
                 elif has_position and avg_entry_price > 0 and neural["side"] == "SELL":
                     _min_profit_pct = (current_price - avg_entry_price) / avg_entry_price * 100
-                    if 0 < _min_profit_pct < 0.2:
+                    if 0 < _min_profit_pct < 0.3:
                         neural["side"] = "HOLD"
                         neural["decision_note"] = f"[震盪盤持有] 盈利{_min_profit_pct:.3f}%未達最小目標0.2%，繼續持有{_ranging_note}"
                 # 震盪盤買入需RSI<40（更嚴格）
@@ -892,7 +973,7 @@ def main():
                     _hp_pct = (current_price - avg_entry_price) / avg_entry_price * 100
                     if 0 < _hp_pct < 0.2:
                         neural["side"] = "HOLD"
-                        neural["decision_note"] = f"[震盪盤持有] 高點但盈利{_hp_pct:.3f}%未達0.2%，繼續等待 [震盪盤模式]"
+                        neural["decision_note"] = f"[震盪盤持有] 高點但盈利{_hp_pct:.3f}%未達0.3%，繼續等待"
                     else:
                         neural["side"] = "SELL"
                         neural["decision_note"] = visual_note + " [高點強制賣出]"
@@ -920,7 +1001,12 @@ def main():
                     if neural["side"] == "BUY":
                         guard.strategy_budget = fixed_btc * current_price * 1.01  # 1% buffer for exact fill
                     else:
-                        guard.strategy_budget = float(ledger.cash)  # sell all
+                        _sell_pct = neural.get("sell_pct", 1.0)
+                        _pos_qty = float(ledger.positions.get(product, 0))
+                        if _sell_pct < 1.0 and _pos_qty > 0:
+                            guard.strategy_budget = _pos_qty * _sell_pct * current_price
+                        else:
+                            guard.strategy_budget = float(ledger.cash)  # sell all
                     order = action.invoke({"product": product, "side": neural["side"]})
                     guard.strategy_budget = None
                 except Veto as e:
@@ -932,7 +1018,8 @@ def main():
                 last_trade_side = neural.get("side", None)  # 記錄交易類型用於冷卻
                 exec_side = neural.get("side", order.get("side", ""))
                 if exec_side == "BUY":
-                    last_buy_time = time.time()  # track buy time for min hold
+                    last_buy_time = time.time()
+                    tp_stage = 0  # track buy time for min hold
                 # After sell, reset grid reference to current price
                 if exec_side == "SELL":
                     grid_ref_price = current_price
@@ -957,10 +1044,12 @@ def main():
                     if new_qty <= 0.0001:
                         avg_entry_price = 0.0
             # Add TP levels and avg entry to neural for UI display
-            neural["tp1"] = round(avg_entry_price * 1.001, 2) if avg_entry_price > 0 else None
-            neural["tp2"] = round(avg_entry_price * 1.002, 2) if avg_entry_price > 0 else None
-            neural["tp3"] = round(avg_entry_price * 1.003, 2) if avg_entry_price > 0 else None
+            neural["tp1"] = round(avg_entry_price * 1.005, 2) if avg_entry_price > 0 else None
+            neural["tp2"] = round(avg_entry_price * 1.010, 2) if avg_entry_price > 0 else None
+            neural["tp3"] = round(avg_entry_price * 1.015, 2) if avg_entry_price > 0 else None
             neural["avg_entry"] = round(avg_entry_price, 2) if avg_entry_price > 0 else None
+            neural["atr_pct"] = round(_atr_pct, 2)
+            neural["regime"] = "震盪盤" if _is_ranging else "趨勢盤"
 
             row = {
                 "tick": ledger.get("tick"),

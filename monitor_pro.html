@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
 <meta charset="UTF-8">
@@ -403,7 +403,7 @@
 </div>
 
 <!-- 切換時鎖定畫面遮罩 -->
-<div id="switchOverlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:99998;justify-content:center;align-items:center;">
+<div id="switchOverlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:#000;z-index:99998;justify-content:center;align-items:center;">
   <div style="text-align:center;color:#00ff88;font-family:'JetBrains Mono',monospace;">
     <div style="font-size:48px;margin-bottom:16px;">⏳</div>
     <div style="font-size:18px;font-weight:900;">切換交易對中...</div>
@@ -493,6 +493,10 @@ function applySettings() {
   ov.style.display = 'flex';
   ovStatus.textContent = '正在重啟伺服器...';
   status.textContent = '⏳ 正在切換...';
+  // 立即清除舊圖表數據
+  try { klines = []; drawEyeChart(); } catch(e){}
+  try { document.getElementById('depthAsks').innerHTML = ''; document.getElementById('depthBids').innerHTML = ''; depthData = {bids:[], asks:[]}; } catch(e){}
+  try { const kc = document.getElementById('klineChart'); if (kc) { const ctx = kc.getContext('2d'); ctx.clearRect(0,0,kc.width,kc.height); } } catch(e){}
   fetch('/api/switch', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
@@ -514,10 +518,10 @@ function applySettings() {
     const waitForReady = setInterval(() => {
       tries++;
       fetch('/api/state').then(r => r.json()).then(state => {
-        if (state.latest && state.latest.tick > 0) {
+        if (state.latest && state.latest.tick > 0 && state.latest.product === pair) {
           clearInterval(waitForReady);
           ovStatus.textContent = '✅ 就緒，等待數據載入...';
-          setTimeout(() => location.reload(), 3000);
+          setTimeout(() => location.href = location.pathname + '?t=' + Date.now(), 2000);
         }
       }).catch(() => {
         if (tries > 45) { // 45s timeout
@@ -794,6 +798,7 @@ function applySettings() {
     <span style="display:flex;gap:8px;align-items:center;">
       <button id="tabFly" onclick="switchTradeTab('fly')" style="background:#00d2d3;color:#000;border:none;padding:5px 14px;border-radius:4px;font-size:12px;cursor:pointer;font-weight:700;">果蠅交易 [綜合]</button>
       <button id="tabNoBrain" onclick="switchTradeTab('nobrain')" style="background:transparent;color:var(--dim);border:1px solid var(--border);padding:5px 14px;border-radius:4px;font-size:12px;cursor:pointer;font-weight:700;">無腦交易 [15分K]</button>
+      <span id="buyCooldown" style="font-size:11px;color:var(--yellow);font-weight:600;"></span>
       <span style="font-size:11px;color:var(--dim);" id="eventCount">0 筆</span>
     </span>
   </div>
@@ -1811,7 +1816,7 @@ function fetchLivePrice() {
         liveBtcPrice = parseFloat(d.price);
       }
       if (state && state.latest && state.latest.product) {
-        productSymbol = state.latest.product.split('-')[0] || 'ZEC';
+        productSymbol = state.latest.product.split('-')[0] || '載入中…';
     // Update all hardcoded labels
     ['klineTitle','depthTitle','holdTitle'].forEach(function(id){
       var el = document.getElementById(id);
@@ -2442,6 +2447,21 @@ function updatePnL(meta, simEquity, initial) {
   const unrealized = nbUnrealized; // 果蠅無持倉時就是0
   const roi = initial > 0 ? (totalPnl / (initial + nbInitial) * 100) : 0;
 
+  // 勝率統計：從trades計算已平倉交易
+  const sellTrades = trades.filter(t => t.side === 'SELL' && t.pnl !== undefined && t.pnl !== null);
+  const wins = sellTrades.filter(t => t.pnl > 0).length;
+  const losses = sellTrades.filter(t => t.pnl <= 0).length;
+  const winRate = sellTrades.length > 0 ? (wins / sellTrades.length * 100) : 0;
+  const avgWin = wins > 0 ? sellTrades.filter(t => t.pnl > 0).reduce((s,t) => s + t.pnl, 0) / wins : 0;
+  const avgLoss = losses > 0 ? sellTrades.filter(t => t.pnl <= 0).reduce((s,t) => s + t.pnl, 0) / losses : 0;
+  const winRateEl = document.getElementById('winRate');
+  if (winRateEl) {
+    winRateEl.textContent = sellTrades.length > 0
+      ? `勝率 ${winRate.toFixed(0)}% (${wins}勝${losses}敗) 均賺$${avgWin.toFixed(2)}/均賠$${avgLoss.toFixed(2)}`
+      : '等待首次賣出...';
+    winRateEl.style.color = winRate >= 50 ? 'var(--green)' : 'var(--red)';
+  }
+
   // Position value (fly + no_brain)
   const posValue = btcAmount > 0 ? btcAmount * markPrice : 0;
   const totalPosValue = posValue + (nbPos * markPrice);
@@ -2460,6 +2480,8 @@ function updatePnL(meta, simEquity, initial) {
     pnlPct.textContent = (roi >= 0 ? '+' : '') + roi.toFixed(2) + '%';
     pnlPct.style.color = roi >= 0 ? 'var(--green)' : 'var(--red)';
   }
+  const winRateDiv = document.getElementById('winRate');
+  if (winRateDiv && !winRateDiv.textContent) winRateDiv.textContent = '等待首次賣出...';
   if (pnlBox) {
     pnlBox.classList.remove('pnl-profit', 'pnl-loss');
     pnlBox.classList.add(totalPnl >= 0 ? 'pnl-profit' : 'pnl-loss');
@@ -2561,6 +2583,28 @@ function updateUI() {
   const chanSide = neural.chan_side || 'HOLD';
   decEl.innerHTML = `<div>果蠅:<span style="color:${flySide==='BUY'?'#2ed573':flySide==='SELL'?'#ff4757':'#a4b0be'}">${flySide}</span></div><div>纏論:<span style="color:${chanSide==='BUY'?'#2ed573':chanSide==='SELL'?'#ff4757':'#a4b0be'}">${chanSide}</span></div>`;
   decEl.className = 'decision-big decision-' + side;
+  // 顯示買入冷卻倒數（30分鐘）
+  try {
+    const BUY_CD = 1800;
+    const buyEvts = (events||[]).filter(e => e.neural && (e.neural.side==='BUY' || (e.execution && e.execution.base)));
+    let lastBuy = 0;
+    buyEvts.forEach(e => { if (e.neural && e.neural.side==='BUY' && e.wall_time > lastBuy) lastBuy = e.wall_time; });
+    if (lastBuy > 0) {
+      const elapsed = (Date.now()/1000) - lastBuy;
+      const remain = Math.max(0, BUY_CD - elapsed);
+      const cdEl = document.getElementById('buyCooldown');
+      if (cdEl) {
+        if (remain > 0) {
+          const m = Math.floor(remain/60), s = Math.floor(remain%60);
+          cdEl.innerHTML = `⏳ 買入冷卻 <span style="color:var(--yellow);font-weight:700;">${m}:${s.toString().padStart(2,'0')}</span>`;
+          cdEl.style.display = 'block';
+        } else {
+          cdEl.innerHTML = `✅ 買入冷卻已結束`;
+          cdEl.style.display = 'block';
+        }
+      }
+    }
+  } catch(e) {}
 
   // Update TP levels for chart display
   currentTP = {
