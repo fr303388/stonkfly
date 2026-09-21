@@ -626,6 +626,7 @@ function applySettings() {
   <div class="panel brain-panel" id="brainPanel" style="flex:2;min-width:0;margin:0;display:flex;flex-direction:column;">
     <div class="panel-header">
       <span class="brain-toggle" onclick="toggleBrain()"><span class="icon">🧠</span>果蠅大腦神經元模擬 (Swat電路) <span id="brainArrow">▼</span></span>
+    <button onclick="disableBrain()" id="brainDisableBtn" style="background:rgba(255,80,80,0.2);border:1px solid #ff5050;color:#ff5050;padding:2px 10px;border-radius:4px;font-size:11px;cursor:pointer;font-weight:600;">停用</button>
     <span style="font-size:11px;color:var(--dim)" id="brainInfo">載入中…</span>
     </div>
     <div class="brain-wrap" style="position:relative;width:100%;flex:1;min-height:200px;overflow:hidden;">
@@ -740,7 +741,7 @@ function applySettings() {
       <button class="tf-btn" onclick="setTimeframe('5m')" id="tf5m">5分</button>
       <button class="tf-btn" onclick="setTimeframe('15m')" id="tf15m">15分</button>
 
-      <button class="tf-btn" onclick="toggleAutoRotate()" id="autoRotateBtn" style="background:transparent;color:var(--dim);">↻ 自動15s</button>
+      <button class="tf-btn" onclick="toggleAutoRotate()" id="autoRotateBtn" style="background:rgba(255,255,255,0.05);border-color:var(--border);color:var(--dim);">↻ 已暫停</button>
     </span>
     </span>
     <span style="font-size:11px;color:var(--dim)" id="tokenInfo">--</span>
@@ -1869,7 +1870,7 @@ function setTimeframe(tf) {
 
 // Auto-rotate timeframes every 15 seconds
 const TF_ROTATE_LIST = ['1m', '5m', '15m'];
-let tfAutoRotate = true;
+let tfAutoRotate = false;
 let tfRotateIndex = 0;
 let tfRotateTimer = null;
 
@@ -2538,22 +2539,16 @@ function updatePnL(meta, simEquity, initial) {
   const simQuote = (state && state.latest && state.latest.quote) ? state.latest.quote : {};
   const markPrice = liveBtcPrice > 0 ? liveBtcPrice : (simQuote.bid ? parseFloat(simQuote.bid) : (marketPrice1m > 0 ? marketPrice1m : lastBtcPrice));
 
-  // 果蠅：直接用後端 equity_usdc
+  // 果蠅：直接用後端 equity_usdc（共用池）
   const flyEquity = parseFloat(state.latest?.equity_usdc || simEquity || cash);
-  const flyTotalPnl = flyEquity - initial;
-
-  // 無腦：直接用後端 no_brain_state.equity（已包含 unrealized）
   const nbState = (state && state.no_brain_state) ? state.no_brain_state : {};
-  const nbInitial = parseFloat(nbState.initial_cash || initial);
-  const nbEquity = parseFloat(nbState.equity || 0);
-  const nbTotalPnl = nbEquity - nbInitial;
   const nbPos = parseFloat(nbState.position || 0);
   const nbUnrealized = parseFloat(nbState.unrealized_pnl || 0);
 
-  // 合計
-  const totalPnl = flyTotalPnl + nbTotalPnl;
-  const unrealized = nbUnrealized; // 果蠅無持倉時就是0
-  const roi = initial > 0 ? (totalPnl / (initial + nbInitial) * 100) : 0;
+  // 單一資金池：P&L = equity - initial
+  const totalPnl = flyEquity - initial;
+  const unrealized = nbUnrealized;
+  const roi = initial > 0 ? (totalPnl / initial * 100) : 0;
 
   // 勝率統計（需有trades變數才計算）
   try {
@@ -2972,35 +2967,18 @@ function updatePnlSummary(tab) {
   const flyInit = parseFloat(meta.initial_cash || 100);
   const flyTotal = flyEquity - flyInit;
 
-  // === 無腦：直接用後端 no_brain_state ===
+  // === 無腦：共用池，不單獨計算 ===
   const nbState = (state && state.no_brain_state) ? state.no_brain_state : {};
-  const nbCash = parseFloat(nbState.cash || 0);
   const nbBtc = parseFloat(nbState.position || 0);
-  const nbEquity = parseFloat(nbState.equity || 0);
-  const nbInit = parseFloat(nbState.initial_cash || (parseFloat(meta.initial_cash || 100) / 2));
-  const nbTotal = nbEquity - nbInit;
 
-  // === 顯示 ===
+  // === 顯示：單一資金池 ===
   const flyCashEl = document.getElementById('pnlFlyCash');
-  const nbCashEl = document.getElementById('pnlNbCash');
   if (flyCashEl) flyCashEl.textContent = '$' + flyCash.toLocaleString('en-US', {maximumFractionDigits: 2});
-  if (nbCashEl) nbCashEl.textContent = '$' + nbCash.toLocaleString('en-US', {maximumFractionDigits: 2});
-  posEl.textContent = flyBtc.toFixed(4) + ' ' + productSymbol;
-  // 果蠅盈虧
-  if (flyTotalEl) {
-    flyTotalEl.textContent = (flyTotal >= 0 ? '+' : '') + '$' + flyTotal.toFixed(2);
-    flyTotalEl.style.color = flyTotal >= 0 ? '#39ff14' : '#ff3131';
-  }
-  // 無腦盈虧
-  if (nbTotalEl) {
-    nbTotalEl.textContent = (nbTotal >= 0 ? '+' : '') + '$' + nbTotal.toFixed(2);
-    nbTotalEl.style.color = nbTotal >= 0 ? '#39ff14' : '#ff3131';
-  }
-  // 合計
-  const combined = flyTotal + nbTotal;
+  posEl.textContent = (flyBtc + nbBtc).toFixed(4) + ' ' + productSymbol;
+  // 合計盈虧 = equity - initial
   if (totalEl) {
-    totalEl.textContent = (combined >= 0 ? '+' : '') + '$' + combined.toFixed(2);
-    totalEl.style.color = combined >= 0 ? '#39ff14' : '#ff3131';
+    totalEl.textContent = (flyTotal >= 0 ? '+' : '') + '$' + flyTotal.toFixed(2);
+    totalEl.style.color = flyTotal >= 0 ? '#39ff14' : '#ff3131';
   }
 }
 
@@ -3426,6 +3404,29 @@ setInterval(() => {
     m.style.color = d.mb > 3500 ? '#ff6b6b' : 'var(--dim)';
   }).catch(()=>{});
 }, 1000);
+
+// ============ BRAIN DISABLE (save GPU) ============
+function disableBrain() {
+  const iframe = document.getElementById('brainAtlas');
+  const btn = document.getElementById('brainDisableBtn');
+  const info = document.getElementById('brainInfo');
+  if (iframe.src && iframe.src !== 'about:blank') {
+    iframe.dataset.originalSrc = iframe.src;
+    iframe.src = 'about:blank';
+    btn.textContent = '啟用';
+    btn.style.background = 'rgba(57,255,20,0.2)';
+    btn.style.borderColor = '#39ff14';
+    btn.style.color = '#39ff14';
+    if (info) info.textContent = '已停用（省GPU）';
+  } else {
+    iframe.src = iframe.dataset.originalSrc || '/brain-swat/';
+    btn.textContent = '停用';
+    btn.style.background = 'rgba(255,80,80,0.2)';
+    btn.style.borderColor = '#ff5050';
+    btn.style.color = '#ff5050';
+    if (info) info.textContent = '載入中…';
+  }
+}
 
 // ============ BRAIN TOGGLE ============
 let brainCollapsed = false;

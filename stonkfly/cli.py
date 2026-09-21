@@ -334,7 +334,14 @@ def main():
         web_learner.save_path = out / "chanlun_web_learning.json"
         web_learner.state = web_learner._load_state()
         _web_study_counter = 0
-        no_brain_trader = ChanNoBrainTrader(out / "no_brain_state.json", initial_cash=float(settings.capital))
+        no_brain_trader = ChanNoBrainTrader(out / "no_brain_state.json", initial_cash=0)
+        # 共用果蠅帳戶現金
+        def _shared_cash():
+            try:
+                return float(broker.state().get("cash", settings.capital))
+            except Exception:
+                return settings.capital
+        no_brain_trader.cash_provider = _shared_cash
         provider = StonkflyActions(guard, broker)
         action = provider.get_actions()[0]
         count = 0

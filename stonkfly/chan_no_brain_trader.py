@@ -15,6 +15,7 @@ class ChanNoBrainTrader:
         self.state_path = Path(state_path)
         self.initial_cash = initial_cash
         self.cash = initial_cash
+        self.cash_provider = None
         self.position = 0.0
         self.avg_entry = 0.0
         self.highest_since_entry = 0.0  # 移動止盈用
@@ -173,7 +174,8 @@ class ChanNoBrainTrader:
             if trend == "downtrend" and percentile > 20:
                 return {"action": "WAIT", "reason": f"下跌趨勢 百分位{percentile:.0f}%"}
 
-            buy_amount = min(self.cash * 0.95, self.cash)
+            avail = self.cash_provider() if self.cash_provider else self.cash
+            buy_amount = min(avail, avail)
             if buy_amount > 10 and current_price > 0:
                 qty = buy_amount / current_price
                 self.position = qty
