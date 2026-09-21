@@ -1,4 +1,4 @@
-import hashlib
+﻿import hashlib
 import json
 import math
 from dataclasses import asdict, dataclass
@@ -25,8 +25,8 @@ def up(value, step):
 @dataclass(frozen=True)
 class Settings:
     products: tuple[str, ...] = ("BTC-USDC",)
-    capital: str = "5000"
-    order_limit: str = "100"
+    capital: str = "2500"
+    order_limit: str = "50"
     loss_stop: str = "500000"
     fee_reserve: str = "0.02"
     slippage: str = "0.005"
@@ -97,3 +97,4 @@ class Settings:
         return hashlib.sha256(
             json.dumps(asdict(self), sort_keys=True).encode()
         ).hexdigest()
+

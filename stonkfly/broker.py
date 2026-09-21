@@ -74,6 +74,16 @@ class CoinbaseBroker:
 
     @classmethod
     def from_env(cls, settings, ledger):
+        try:
+            from pathlib import Path as _P
+            envf = _P(".env")
+            if envf.exists():
+                for line in envf.read_text(encoding="utf-8").splitlines():
+                    if "=" in line and not line.startswith("#"):
+                        k, v = line.split("=", 1)
+                        os.environ.setdefault(k.strip(), v.strip())
+        except Exception:
+            pass
         if os.environ.get("STONKFLY_LIVE") != "I_ACCEPT_REAL_TRADES":
             raise RuntimeError("Live opt-in missing")
         from coinbase.rest import RESTClient

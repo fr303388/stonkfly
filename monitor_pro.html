@@ -435,6 +435,10 @@
       <option value="LTC-USDT">LTC/USDT</option>
       <option value="DOGE-USDT">DOGE/USDT</option>
       <option value="PEPE-USDT">PEPE/USDT</option>
+      <option value="HYPE-USDT">HYPE/USDT</option>
+      <option value="WLD-USDT">WLD/USDT</option>
+      <option value="BCH-USDT">BCH/USDT</option>
+      <option value="PENGU-USDT">PENGU/USDT</option>
     </select>
   </div>
   <div style="margin-bottom:14px;">
@@ -454,6 +458,14 @@
         font-family:'JetBrains Mono',monospace;font-size:13px;outline:none;"
         oninput="setCustomCap(this.value)">
     </div>
+  </div>
+  <div style="margin-bottom:14px;padding:10px;border-radius:8px;background:#1a1a00;border:1px solid #333;">
+    <div style="font-size:11px;color:#ffaa00;margin-bottom:6px;letter-spacing:1px;">Binance API (optional)</div>
+    <input id="apiKey" type="text" placeholder="API Key" style="width:100%;padding:8px;border-radius:8px;background:#111;border:1px solid #333;color:#ffaa00;font-family:monospace;font-size:11px;outline:none;margin-bottom:6px;box-sizing:border-box;">
+    <input id="apiSecret" type="password" placeholder="API Secret" style="width:100%;padding:8px;border-radius:8px;background:#111;border:1px solid #333;color:#ffaa00;font-family:monospace;font-size:11px;outline:none;margin-bottom:6px;box-sizing:border-box;">
+    <label style="font-size:11px;color:#0f0;cursor:pointer;">
+      <input type="checkbox" id="liveMode"> Live trading (real money)
+    </label>
   </div>
   <button onclick="applySettings()" style="width:100%;padding:10px;border-radius:10px;border:none;
     background:linear-gradient(135deg,#00d2d3,#00ff88);color:#000;font-weight:900;font-size:14px;cursor:pointer;">
@@ -500,7 +512,7 @@ function applySettings() {
   fetch('/api/switch', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({pair: pair, capital: selectedCap})
+    body: JSON.stringify({pair: pair, capital: selectedCap, live: document.getElementById('liveMode').checked, api_key: document.getElementById('apiKey').value, api_secret: document.getElementById('apiSecret').value})
   }).then(r => r.json()).then(d => {
     if (!d.ok) {
       status.textContent = '❌ ' + (d.error || '失敗');
@@ -551,18 +563,9 @@ function applySettings() {
       <span id="netValue" style="font-size:18px;font-weight:700;color:#aaa;font-family:'JetBrains Mono',monospace;">--</span>
     </div>
   </div>
-  <!-- 右邊：盈虧（分開果蠅/無腦/合計） -->
-  <div style="padding:14px 20px;display:flex;flex-direction:column;gap:4px;border-left:2px solid var(--border);min-width:280px;">
-    <div style="display:flex;justify-content:space-between;align-items:baseline;">
-      <span style="font-size:11px;color:var(--dim);letter-spacing:1px;">🦟 果蠅盈虧</span>
-      <span id="flyPnlLive" style="font-size:18px;font-weight:800;font-family:'JetBrains Mono',monospace;">--</span>
-    </div>
-    <div style="display:flex;justify-content:space-between;align-items:baseline;">
-      <span style="font-size:11px;color:var(--dim);letter-spacing:1px;">🤖 無腦盈虧</span>
-      <span id="nbPnlLive" style="font-size:18px;font-weight:800;font-family:'JetBrains Mono',monospace;">--</span>
-    </div>
-    <div style="display:flex;justify-content:space-between;align-items:baseline;border-top:1px solid var(--border);padding-top:4px;margin-top:2px;">
-      <span style="font-size:11px;color:var(--dim);letter-spacing:1px;">🏆 合計總盈虧</span>
+  <!-- 右邊：總盈虧（合併） -->
+  <div style="padding:14px 20px;display:flex;flex-direction:column;gap:4px;border-left:2px solid var(--border);min-width:200px;">
+    <div style="display:flex;justify-content:flex-end;align-items:baseline;">
       <span id="pnlLive" style="font-size:24px;font-weight:900;font-family:'JetBrains Mono',monospace;text-shadow:0 0 12px currentColor;">--</span>
     </div>
     <div id="pnlPct" style="text-align:right;font-size:11px;color:var(--dim);font-family:'JetBrains Mono',monospace;">--</div>
@@ -657,6 +660,7 @@ function applySettings() {
         <div id="positionDir" style="flex:1;text-align:center;font-size:22px;font-weight:900;font-family:'JetBrains Mono',monospace;color:var(--dim);letter-spacing:2px;"></div>
       </div>
       <div class="exec-status" id="execStatus">執行: --</div>
+      <div id="stimStatus" style="font-size:11px;color:var(--dim);text-align:center;margin-top:2px;">無刺激</div>
       <div class="hz-row">
         <span class="hz-label">DNp20 放電</span>
         <div class="hz-bar-bg"><div class="hz-bar" id="leftBar" style="background:var(--red);width:0%"></div></div>
@@ -721,7 +725,7 @@ function applySettings() {
         <div id="webLearningStatus" style="font-size:10px;color:var(--text);font-family:'JetBrains Mono',monospace;line-height:1.6;">載入中…</div>
         <div id="webLearningArticle" style="font-size:10px;color:var(--dim);font-family:'JetBrains Mono',monospace;margin-top:4px;line-height:1.5;"></div>
       </div>
-      <div id="stimStatus" style="font-size:10px;color:var(--dim);text-align:center;margin-top:6px;margin-bottom:4px;">無刺激</div>
+      
     </div>
   </div>
 </div><!-- /row1 -->
@@ -736,7 +740,7 @@ function applySettings() {
       <button class="tf-btn" onclick="setTimeframe('5m')" id="tf5m">5分</button>
       <button class="tf-btn" onclick="setTimeframe('15m')" id="tf15m">15分</button>
 
-      <button class="tf-btn" onclick="toggleAutoRotate()" id="autoRotateBtn" style="background:rgba(0,210,211,0.2);border-color:#00d2d3;color:#00d2d3;">↻ 自動15s</button>
+      <button class="tf-btn" onclick="toggleAutoRotate()" id="autoRotateBtn" style="background:transparent;color:var(--dim);">↻ 自動15s</button>
     </span>
     </span>
     <span style="font-size:11px;color:var(--dim)" id="tokenInfo">--</span>
@@ -795,45 +799,13 @@ function applySettings() {
 <div class="panel" style="margin:0;">
   <div class="panel-header">
     <span><span class="icon">📋</span>交易紀錄</span>
-    <span style="display:flex;gap:8px;align-items:center;">
-      <button id="tabFly" onclick="switchTradeTab('fly')" style="background:#00d2d3;color:#000;border:none;padding:5px 14px;border-radius:4px;font-size:12px;cursor:pointer;font-weight:700;">果蠅交易 [綜合]</button>
-      <button id="tabNoBrain" onclick="switchTradeTab('nobrain')" style="background:transparent;color:var(--dim);border:1px solid var(--border);padding:5px 14px;border-radius:4px;font-size:12px;cursor:pointer;font-weight:700;">無腦交易 [15分K]</button>
+    <span style="display:flex;gap:16px;align-items:center;font-size:12px;">
+      <span style="color:var(--dim);">現金 <span id="pnlFlyCash" style="color:#fff;font-weight:700;font-family:monospace;">--</span></span>
+      <span style="color:var(--dim);">持倉 <span id="pnlPosition" style="color:#00d2d3;font-weight:700;font-family:monospace;">--</span></span>
+      <span style="color:var(--dim);">盈虧 <span id="pnlTotal" style="font-weight:900;font-family:monospace;">--</span></span>
       <span id="buyCooldown" style="font-size:11px;color:var(--yellow);font-weight:600;"></span>
       <span style="font-size:11px;color:var(--dim);" id="eventCount">0 筆</span>
     </span>
-  </div>
-  <!-- 盈虧匯總欄 -->
-  <div id="pnlSummary" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:16px 20px;background:linear-gradient(180deg,rgba(0,210,211,0.05),transparent);border-bottom:1px solid var(--border);">
-    <!-- 左邊：帳戶資訊 -->
-    <div style="display:flex;flex-direction:column;gap:8px;">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;">
-        <span style="font-size:11px;color:var(--dim);letter-spacing:1px;">🦟 果蠅現金</span>
-        <span id="pnlFlyCash" style="font-size:18px;font-weight:800;color:#fff;font-family:'JetBrains Mono',monospace;">--</span>
-      </div>
-      <div style="display:flex;justify-content:space-between;align-items:baseline;">
-        <span style="font-size:11px;color:var(--dim);letter-spacing:1px;">🤖 無腦現金</span>
-        <span id="pnlNbCash" style="font-size:18px;font-weight:800;color:#fff;font-family:'JetBrains Mono',monospace;">--</span>
-      </div>
-      <div style="display:flex;justify-content:space-between;align-items:baseline;">
-        <span style="font-size:11px;color:var(--dim);letter-spacing:1px;">📦 <span id="holdTitle"></span>持倉</span>
-        <span id="pnlPosition" style="font-size:22px;font-weight:900;color:#00d2d3;font-family:'JetBrains Mono',monospace;">--</span>
-      </div>
-    </div>
-    <!-- 右邊：盈虧資訊（分開果蠅/無腦/合計） -->
-    <div style="display:flex;flex-direction:column;gap:6px;border-left:2px solid var(--border);padding-left:16px;">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;">
-        <span style="font-size:11px;color:var(--dim);letter-spacing:1px;">🦟 果蠅盈虧</span>
-        <span id="pnlFlyTotal" style="font-size:18px;font-weight:800;font-family:'JetBrains Mono',monospace;">--</span>
-      </div>
-      <div style="display:flex;justify-content:space-between;align-items:baseline;">
-        <span style="font-size:11px;color:var(--dim);letter-spacing:1px;">🤖 無腦盈虧</span>
-        <span id="pnlNbTotal" style="font-size:18px;font-weight:800;font-family:'JetBrains Mono',monospace;">--</span>
-      </div>
-      <div style="display:flex;justify-content:space-between;align-items:baseline;border-top:1px solid var(--border);padding-top:4px;">
-        <span style="font-size:11px;color:var(--dim);letter-spacing:1px;">🏆 合計總盈虧</span>
-        <span id="pnlTotal" style="font-size:22px;font-weight:900;font-family:'JetBrains Mono',monospace;text-shadow:0 0 10px currentColor;">--</span>
-      </div>
-    </div>
   </div>
   <div id="eventLog" style="max-height:400px;overflow-y:auto;width:100%;font-family:'JetBrains Mono',monospace;font-size:11px;">
     <div style="padding:20px;text-align:center;color:var(--dim)">載入中…</div>
@@ -867,7 +839,7 @@ let scene, camera, renderer, controls, points, labels = [];
 let composer, bloomPass;
 let neuronFibers = [];
 let brainGlowSprites = [];
-let autoRotate = true;
+let autoRotate = false;
 let colorMode = 'region';
 let showKC = true;
 let showRetina = true;
@@ -2887,8 +2859,7 @@ function updateUI() {
   // Always calculate totalRealizedPnl first, then update P&L display
   try { calculateTotalRealizedPnl(state.events || []); } catch(e) { console.warn('calcRealized錯誤:', e); }
   try {
-    if (currentTradeTab === 'fly') renderEvents(state.events || []);
-    else renderNoBrainTrades(state.no_brain_trades || []);
+    renderCombinedTrades(state);
   } catch(e) { console.warn('renderTrades錯誤:', e); }
 
   // Dopamine stats (merged into neural monitor)
@@ -2921,38 +2892,72 @@ function toUTC8(ts) {
   return `${h}:${m}:${s}`;
 }
 
-let currentTradeTab = 'fly';
-function switchTradeTab(tab) {
-  currentTradeTab = tab;
-  const flyBtn = document.getElementById('tabFly');
-  const nbBtn = document.getElementById('tabNoBrain');
-  if (tab === 'fly') {
-    flyBtn.style.background = '#00d2d3';
-    flyBtn.style.color = '#000';
-    flyBtn.style.border = 'none';
-    nbBtn.style.background = 'transparent';
-    nbBtn.style.color = 'var(--dim)';
-    nbBtn.style.border = '1px solid var(--border)';
-  } else {
-    nbBtn.style.background = '#ff6b81';
-    nbBtn.style.color = '#000';
-    nbBtn.style.border = 'none';
-    flyBtn.style.background = 'transparent';
-    flyBtn.style.color = 'var(--dim)';
-    flyBtn.style.border = '1px solid var(--border)';
+function renderCombinedTrades(state) {
+  const log = document.getElementById('eventLog');
+  if (!log) return;
+  const events = state.events || [];
+  const nbState = (state.latest && state.latest.no_brain) || (state.no_brain_state) || {};
+  const nbTrades = nbState.recent_trades || state.no_brain_trades || [];
+  const combined = [];
+  events.forEach(e => {
+    if (e.execution && e.execution.status === 'FILLED') {
+      const qty = parseFloat(e.execution.base || 0);
+      const amount = parseFloat(e.execution.quote || 0);
+      const price = qty > 0 ? amount / qty : 0;
+      combined.push({
+        time: e.wall_time || e.ts || 0,
+        side: (e.neural && e.neural.side) || '?',
+        price: price,
+        amount: amount,
+        qty: qty,
+        pnl: 0,
+        reason: (e.neural && e.neural.decision_note) || ((e.neural && e.neural.fly_side) ? '果蠅:'+e.neural.fly_side+' 纏論:'+(e.neural.chan_side||'?') : '神經決策'),
+        source: '果蠅'
+      });
+    }
+  });
+  nbTrades.forEach(t => {
+    combined.push({
+      time: t.time || 0,
+      side: t.side || '?',
+      price: parseFloat(t.price || 0),
+      amount: parseFloat(t.amount || 0),
+      qty: parseFloat(t.qty || 0),
+      pnl: parseFloat(t.pnl || 0),
+      reason: t.signal || '',
+      source: '無腦'
+    });
+  });
+  combined.sort((a,b) => b.time - a.time);
+  if (combined.length === 0) {
+    document.getElementById('eventCount').textContent = combined.length + ' 筆成交';
+    log.innerHTML = '<div style="padding:20px;text-align:center;color:var(--dim)">尚無成交記錄…</div>';
+    return;
   }
-  if (state) {
-    updatePnlSummary(tab);
-    if (tab === 'fly') renderEvents(state.events || []);
-    else renderNoBrainTrades(state.no_brain_trades || []);
-  }
+  document.getElementById('eventCount').textContent = combined.length + ' 筆成交';
+  log.innerHTML = combined.slice(0, 100).map((t, i) => {
+    const d = new Date(t.time * 1000);
+    const ts = d.toTimeString().slice(0,8);
+    const isBuy = t.side === 'BUY';
+    const pnlColor = t.pnl > 0 ? 'var(--green)' : (t.pnl < 0 ? 'var(--red)' : 'var(--dim)');
+    const srcColor = t.source === '果蠅' ? '#00d2d3' : '#ff9f43';
+    return `<div style="display:grid;grid-template-columns:50px 70px 50px 80px 80px 70px 1fr;gap:8px;padding:6px 12px;border-bottom:1px solid var(--border);align-items:center;font-size:12px;">
+      <span style="color:var(--dim);">#${combined.length - i}</span>
+      <span style="color:var(--dim);">${ts}</span>
+      <span style="color:${isBuy?'#2ed573':'#ff4757'};font-weight:700;">${t.side}</span>
+      <span style="font-family:monospace;">$${t.price.toFixed(2)}</span>
+      <span style="font-family:monospace;">$${t.amount.toFixed(2)}</span>
+      <span style="color:${pnlColor};font-weight:700;">${t.pnl!==0?(t.pnl>0?'+':'')+t.pnl.toFixed(2):'--'}</span>
+      <span style="color:${srcColor};font-size:11px;">[${t.source}] ${(t.reason||'').slice(0,50)}</span>
+    </div>`;
+  }).join('');
 }
 
 function updatePnlSummary(tab) {
   if (!state) return;
   const posEl = document.getElementById('pnlPosition');
-  const flyTotalEl = document.getElementById('pnlFlyTotal');
-  const nbTotalEl = document.getElementById('pnlNbTotal');
+  const flyTotalEl = null;
+  const nbTotalEl = null;
   const totalEl = document.getElementById('pnlTotal');
 
   const latest = state.latest || {};
@@ -2980,7 +2985,7 @@ function updatePnlSummary(tab) {
   const nbCashEl = document.getElementById('pnlNbCash');
   if (flyCashEl) flyCashEl.textContent = '$' + flyCash.toLocaleString('en-US', {maximumFractionDigits: 2});
   if (nbCashEl) nbCashEl.textContent = '$' + nbCash.toLocaleString('en-US', {maximumFractionDigits: 2});
-  posEl.textContent = flyBtc.toFixed(4) + ' / ' + nbBtc.toFixed(6) + ' ' + productSymbol;
+  posEl.textContent = flyBtc.toFixed(4) + ' ' + productSymbol;
   // 果蠅盈虧
   if (flyTotalEl) {
     flyTotalEl.textContent = (flyTotal >= 0 ? '+' : '') + '$' + flyTotal.toFixed(2);
@@ -3333,15 +3338,21 @@ function updateChanLearning() {
     }
   }
 
-  // Calculate win rate from trade history
+  // Calculate win rate from trade history (fly + no-brain)
   try {
+    let wins = 0, total = 0;
     const allEvts = state.events || [];
-    const sells = allEvts.filter(ev => ev.neural && ev.neural.side === 'SELL' && ev.execution && ev.execution.status === 'FILLED');
-    let wins = 0, total = sells.length;
-    sells.forEach(ev => {
+    const flySells = allEvts.filter(ev => ev.neural && ev.neural.side === 'SELL' && ev.execution && ev.execution.status === 'FILLED');
+    flySells.forEach(ev => {
       const pnl = parseFloat(ev.pnl || ev.realized_pnl || 0);
-      if (pnl > 0) wins++;
+      if (pnl !== 0) { total++; if (pnl > 0) wins++; }
     });
+    const nb = state.latest && state.latest.no_brain;
+    if (nb && nb.recent_trades) {
+      nb.recent_trades.forEach(t => {
+        if (t.side === 'SELL') { total++; if (t.pnl > 0) wins++; }
+      });
+    }
     const wrEl = document.getElementById('tradeWinRate');
     if (wrEl) {
       if (total > 0) {

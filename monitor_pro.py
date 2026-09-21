@@ -1,4 +1,4 @@
-"""Professional Stonkfly monitor with 3D brain visualization.
+﻿"""Professional Stonkfly monitor with 3D brain visualization.
 
 Features:
 - Three.js 3D point cloud of all 166,700 neurons at actual MaleCNS coordinates
@@ -61,8 +61,22 @@ def api_mem():
 def api_switch():
     import subprocess, json, os
     data = request.get_json(force=True)
-    pair = data.get("pair", "ZEC-USDT")
-    capital = str(int(data.get("capital", 100)) // 2)  # half for fly, half for no_brain
+    pair = data.get("pair", "BTC-USDT")
+    capital = str(int(data.get("capital", 100)) // 2)
+    live = data.get("live", False)
+    api_key = data.get("api_key", "")
+    api_secret = data.get("api_secret", "")
+    # Save API keys to .env
+    if api_key and api_secret:
+        env_lines = [f"BINANCE_API_KEY={api_key}", f"BINANCE_API_SECRET={api_secret}"]
+        if live:
+            env_lines += ["STONKFLY_LIVE=I_ACCEPT_REAL_TRADES", "BINANCE_TESTNET=false"]
+        Path(".env").write_text("\n".join(env_lines), encoding="utf-8")
+    elif not live and Path(".env").exists():
+        # Paper mode: remove live flag but keep keys
+        envf = Path(".env").read_text(encoding="utf-8")
+        envf = envf.replace("STONKFLY_LIVE=I_ACCEPT_REAL_TRADES\n", "").replace("BINANCE_TESTNET=false\n", "")
+        Path(".env").write_text(envf, encoding="utf-8")
 
     # Patch capital
     try:
@@ -89,13 +103,13 @@ def api_switch():
         "del /q runs\paper\* >nul 2>&1",
         'start /b "" "' + venv_py + '" monitor_pro.py',
         "timeout /t 1 /nobreak >nul",
-        'start /b "" "' + venv_py + '" -u -m stonkfly.cli run --out runs/paper --products ' + pair + ' --exchange binance --steps 1000 --hz432',
+        'start /b "" "' + venv_py + '" -u -m stonkfly.cli run --out runs/paper --products ' + pair + ' --exchange binance --steps 1000 --hz432' + (" --live" if live else ""),
         'del "%~f0"',
     ]
     Path(bat_path).write_text("\r\n".join(lines), encoding="gbk")
     subprocess.Popen(["cmd", "/c", bat_path], creationflags=0x00000008)
 
-    return jsonify({"ok": True, "pair": pair, "capital": capital, "msg": "切換中..."})
+    return jsonify({"ok": True, "pair": pair, "capital": capital, "msg": "??銝?.."})
 
 app.errorhandler(Exception)
 def handle_all_errors(e):
@@ -414,7 +428,7 @@ def api_state():
         events = _read_events(RUN_DIR / "events.jsonl")
         brain = _load_brain_summary()
         watchdog = _read_json(RUN_DIR / "watchdog_stats.json") or {"restart_count": 0}
-        # 無腦交易：狀態直接用 latest.json（每 tick 更新），交易紀錄從存檔讀
+        # ?∟鈭斗?嚗???亦 latest.json嚗? tick ?湔嚗?鈭斗?蝝??摮?霈
         saved_state = _read_json(RUN_DIR / "no_brain_state.json") or {}
         no_brain_state = latest.get("no_brain", {}) or {}
         # Merge saved state (includes initial_cash)
@@ -642,3 +656,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
