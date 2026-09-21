@@ -2899,14 +2899,26 @@ function renderCombinedTrades(state) {
       const qty = parseFloat(e.execution.base || 0);
       const amount = parseFloat(e.execution.quote || 0);
       const price = qty > 0 ? amount / qty : 0;
+      const n = e.neural || {};
+      let reason = n.decision_note || '';
+      if (!reason) {
+        const parts = [];
+        if (n.fly_side) parts.push('果蠅:'+n.fly_side);
+        if (n.chan_side) parts.push('纏論:'+n.chan_side);
+        if (n.right_hz && n.left_hz) parts.push('左右差'+(n.right_hz-n.left_hz).toFixed(1)+'Hz');
+        if (n.rsi) parts.push('RSI'+n.rsi.toFixed(0));
+        if (n.czsc_signal) parts.push(n.czsc_signal);
+        if (n.reward_spikes) parts.push('獎勵'+n.reward_spikes);
+        reason = parts.length ? parts.join(' · ') : '神經決策';
+      }
       combined.push({
         time: e.wall_time || e.ts || 0,
-        side: (e.neural && e.neural.side) || '?',
+        side: n.side || '?',
         price: price,
         amount: amount,
         qty: qty,
         pnl: 0,
-        reason: (e.neural && e.neural.decision_note) || ((e.neural && e.neural.fly_side) ? '果蠅:'+e.neural.fly_side+' 纏論:'+(e.neural.chan_side||'?') : '神經決策'),
+        reason: reason,
         source: '果蠅'
       });
     }

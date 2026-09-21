@@ -307,7 +307,7 @@ def main():
         chan_imitation_correct = 0  # 果蠅自然決策與纏論一致次數
         if getattr(a, "chan_auto", False):
             from .chan_strategy import ChanAutoStrategy
-            chan_strategy = ChanAutoStrategy(symbol="ZECUSDT", cooldown_seconds=60)
+            chan_strategy = ChanAutoStrategy(symbol=settings.products[0].replace("-","") if settings.products else "BTCUSDT", cooldown_seconds=60)
             # Sync strategy position with ledger on startup
             try:
                 _product = settings.products[0] if settings.products else None
