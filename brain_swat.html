@@ -51,7 +51,7 @@ canvas { display: block; }
 let scene, camera, renderer, controls;
 let neurons = [], edges = [];
 let positions, nodeColors, nodeActivity, nodeEmphasis;
-let nodesMesh, linesMesh;
+let nodesMesh, linesMesh, lineGeom;
 let voltages, currents, spikeCount;
 let nNeurons = 0, nEdges = 0;
 let simStep = 0;
@@ -60,7 +60,7 @@ let adjacency = null;
 let stonkflyActivity = null;
 let lastFetch = 0;
 let flyGameActivity = null;
-let lineActivityArr = null;
+let lineActivityArr = null, drawnEdges = null;
 let drawnEdgeMap = null;
 
 const TAU_DECAY = 0.92;
@@ -165,7 +165,7 @@ function initNeurons() {
             '  vColor = color;',
             '  vActivity = activity;',
             '  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);',
-            '  gl_PointSize = (1.8 + sqrt(max(activity, 0.0)) * 5.0) * emphasis * pixelRatio;',
+            '  gl_PointSize = (2.5 + sqrt(max(activity, 0.0)) * 8.0) * emphasis * pixelRatio;',
             '}'
         ].join('\n'),
         fragmentShader: [
@@ -175,7 +175,7 @@ function initNeurons() {
             '  float r = length(gl_PointCoord - vec2(0.5)) * 2.0;',
             '  if (r > 1.0) discard;',
             '  float core = 1.0 - smoothstep(0.14, 0.52, r);',
-            '  float halo = (1.0 - smoothstep(0.0, 1.0, r)) * 0.25;',
+            '  float halo = (1.0 - smoothstep(0.0, 1.0, r)) * 0.5;',
             '  float excitation = clamp(vActivity, 0.0, 1.0);',
             '  float alpha = mix(0.4 * (1.0-smoothstep(.3,1.0,r)), core * 0.9 + halo, sqrt(excitation));',
             '  vec3 glowColor = mix(vec3(0.0, 0.8, 1.0), vec3(0.6, 0.2, 1.0), excitation);',
@@ -196,8 +196,8 @@ function initNeurons() {
     scene.add(nodesMesh);
 
     // Edges
-    const stride = Math.max(1, Math.ceil(edges.length / 8000));
-    const drawnEdges = edges.filter((_, i) => i % stride === 0);
+    const stride = Math.max(1, Math.ceil(edges.length / 20000));
+    drawnEdges = edges.filter((_, i) => i % stride === 0);
     const linePos = new Float32Array(drawnEdges.length * 6);
     const lineCol = new Float32Array(drawnEdges.length * 6);
     lineActivityArr = new Float32Array(drawnEdges.length * 2);
@@ -211,11 +211,11 @@ function initNeurons() {
             linePos[i*6+a] = positions[src*3+a];
             linePos[i*6+3+a] = positions[tgt*3+a];
         }
-        lineCol[i*6] = 0.12; lineCol[i*6+1] = 0.12; lineCol[i*6+2] = 0.2;
-        lineCol[i*6+3] = 0.12; lineCol[i*6+3+1] = 0.12; lineCol[i*6+3+2] = 0.2;
+        lineCol[i*6] = 0.15; lineCol[i*6+1] = 0.2; lineCol[i*6+2] = 0.4;
+        lineCol[i*6+3] = 0.15; lineCol[i*6+3+1] = 0.2; lineCol[i*6+3+2] = 0.4;
     });
 
-    const lineGeom = new THREE.BufferGeometry();
+    lineGeom = new THREE.BufferGeometry();
     lineGeom.setAttribute('position', new THREE.BufferAttribute(linePos, 3));
     lineGeom.setAttribute('color', new THREE.BufferAttribute(lineCol, 3));
     lineGeom.setAttribute('activity', new THREE.BufferAttribute(lineActivityArr, 1));
@@ -237,9 +237,12 @@ function initNeurons() {
             'varying vec3 vColor;',
             'varying float vActivity;',
             'void main() {',
-            '  if (vActivity < 0.15) discard;',
-            '  float alpha = vActivity * 0.9;',
-            '  vec3 c = mix(vec3(0.0, 0.9, 1.0), vec3(0.7, 0.2, 1.0), vActivity);',
+            '  float baseAlpha = 0.15;',
+            '  float activeAlpha = vActivity * 0.95;',
+            '  float alpha = max(baseAlpha, activeAlpha);',
+            '  vec3 baseColor = vec3(0.1, 0.2, 0.5);',
+            '  vec3 activeColor = mix(vec3(0.0, 0.9, 1.0), vec3(0.7, 0.2, 1.0), vActivity);',
+            '  vec3 c = mix(baseColor, activeColor, vActivity);',
             '  gl_FragColor = vec4(c, alpha);',
             '}'
         ].join('\n'),
@@ -423,7 +426,14 @@ function simStepFn() {
         }
     }
 
-    // 連接線已隱藏，跳過活動更新
+    // 連接線活動更新（放電路徑發光）
+    for (let e = 0; e < drawnEdges.length; e++) {
+        const src = drawnEdgeMap[e*2], tgt = drawnEdgeMap[e*2+1];
+        const act = Math.max(nodeActivity[src], nodeActivity[tgt]);
+        lineActivityArr[e*2] = act;
+        lineActivityArr[e*2+1] = act;
+    }
+    lineGeom.attributes.activity.needsUpdate = true;
 
     let totalActivity = 0;
     for (let i = 0; i < nNeurons; i++) {

@@ -366,9 +366,11 @@ def _load_brain_summary():
         return {"error": str(e)}
 
 
-def _fetch_binance(interval="1m", limit=200):
-    """Fetch Binance ZECUSDT klines."""
+def _fetch_binance(interval="1m", limit=None):
+    """Fetch Binance klines. Higher limit for longer timeframes."""
     global _binance_cache
+    if limit is None:
+        limit = 200 if interval == "1m" else 500
     now = time.time()
     if interval in _binance_cache and now - _binance_cache[interval]["time"] < 3:
         return _binance_cache[interval]["data"]

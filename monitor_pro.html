@@ -1205,7 +1205,7 @@ function drawEyeChart() {
   ctx.fillRect(0, 0, w, h);
 
   if (!klines.length) return;
-  const data = klines.slice(-80);
+  const data = klines.slice(-200);
   const closes = data.map(k => k.c);
   const min = Math.min(...closes), max = Math.max(...closes);
   const range = max - min || 1;
@@ -1271,7 +1271,7 @@ function drawKlineChart() {
   ctx.fillRect(0, 0, w, h);
 
   if (!klines.length) return;
-  const data = klines.slice(-100);
+  const data = klines.slice(-200);
   const highs = data.map(k => k.h), lows = data.map(k => k.l);
   const max = Math.max(...highs), min = Math.min(...lows);
   const range = max - min || 1;
@@ -2018,7 +2018,7 @@ function updateTvChart(data, czscStructures, state) {
 
     // Filter by timeframe: 15m shows 6h, others show 3h
     const now = Date.now();
-    const displayHours = currentTimeframe === '15m' ? 6 : 3;
+    const displayHours = currentTimeframe === '1m' ? 6 : (currentTimeframe === '5m' ? 24 : 48);
     const DISPLAY_MS = displayHours * 60 * 60 * 1000;
     const filteredData = data.filter(k => (now - k.t) <= DISPLAY_MS);
     const displayData = filteredData.length > 0 ? filteredData : data.slice(-100);
@@ -2935,6 +2935,22 @@ function renderCombinedTrades(state) {
       source: '無腦'
     });
   });
+  // Calculate realized P&L for fly trades by matching buys and sells
+  let flyPosQty = 0, flyPosCost = 0;
+  const flySorted = combined.filter(t => t.source === '果蠅').sort((a,b) => a.time - b.time);
+  flySorted.forEach(t => {
+    if (t.side === 'BUY') {
+      flyPosQty += t.qty;
+      flyPosCost += t.amount;
+    } else if (t.side === 'SELL' && flyPosQty > 0) {
+      const avgCost = flyPosCost / flyPosQty;
+      const sellQty = Math.min(t.qty, flyPosQty);
+      t.pnl = (t.price - avgCost) * sellQty;
+      flyPosQty -= sellQty;
+      flyPosCost -= avgCost * sellQty;
+    }
+  });
+
   combined.sort((a,b) => b.time - a.time);
   if (combined.length === 0) {
     document.getElementById('eventCount').textContent = combined.length + ' 筆成交';
@@ -2942,18 +2958,22 @@ function renderCombinedTrades(state) {
     return;
   }
   document.getElementById('eventCount').textContent = combined.length + ' 筆成交';
-  log.innerHTML = combined.slice(0, 100).map((t, i) => {
+  const header = `<div style="display:grid;grid-template-columns:50px 70px 50px 80px 80px 70px 70px 1fr;gap:8px;padding:6px 12px;background:var(--panel2);border-bottom:1px solid var(--border);color:var(--dim);font-size:10px;font-weight:700;position:sticky;top:0;z-index:1;">
+    <span>編號</span><span>時間</span><span>方向</span><span>價格</span><span>金額</span><span>顆數</span><span>盈虧</span><span>理由</span>
+  </div>`;
+  log.innerHTML = header + combined.slice(0, 100).map((t, i) => {
     const d = new Date(t.time * 1000);
     const ts = d.toTimeString().slice(0,8);
     const isBuy = t.side === 'BUY';
     const pnlColor = t.pnl > 0 ? 'var(--green)' : (t.pnl < 0 ? 'var(--red)' : 'var(--dim)');
     const srcColor = t.source === '果蠅' ? '#00d2d3' : '#ff9f43';
-    return `<div style="display:grid;grid-template-columns:50px 70px 50px 80px 80px 70px 1fr;gap:8px;padding:6px 12px;border-bottom:1px solid var(--border);align-items:center;font-size:12px;">
+    return `<div style="display:grid;grid-template-columns:50px 70px 50px 80px 80px 70px 70px 1fr;gap:8px;padding:6px 12px;border-bottom:1px solid var(--border);align-items:center;font-size:12px;">
       <span style="color:var(--dim);">#${combined.length - i}</span>
       <span style="color:var(--dim);">${ts}</span>
       <span style="color:${isBuy?'#2ed573':'#ff4757'};font-weight:700;">${t.side}</span>
       <span style="font-family:monospace;">$${t.price.toFixed(2)}</span>
       <span style="font-family:monospace;">$${t.amount.toFixed(2)}</span>
+      <span style="font-family:monospace;color:var(--text);">${t.qty.toFixed(4)}</span>
       <span style="color:${pnlColor};font-weight:700;">${t.pnl!==0?(t.pnl>0?'+':'')+t.pnl.toFixed(2):'--'}</span>
       <span style="color:${srcColor};font-size:11px;">[${t.source}] ${(t.reason||'').slice(0,50)}</span>
     </div>`;

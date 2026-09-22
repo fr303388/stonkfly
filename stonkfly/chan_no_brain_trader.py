@@ -133,10 +133,10 @@ class ChanNoBrainTrader:
             if current_price > self.highest_since_entry:
                 self.highest_since_entry = current_price
 
-            # 止損
-            if self.stop_loss_price > 0 and current_price <= self.stop_loss_price:
-                self._sell(current_price, "止損", rsi, trend, -1)
-                return {"action": "STOP_LOSS", "price": current_price, "signal": "止損賣出"}
+            # 止損已停用（馬丁格爾模式：6%加倉攤平，不設止損）
+            # if self.stop_loss_price > 0 and current_price <= self.stop_loss_price:
+            #     self._sell(current_price, "止損", rsi, trend, -1)
+            #     return {"action": "STOP_LOSS", "price": current_price, "signal": "止損賣出"}
 
             # 移動止盈：從最高點回落1.5%且已有0.3%以上利潤
             if self.highest_since_entry > 0:

@@ -488,6 +488,26 @@ def main():
                     if _atr_pct < 0.3: _atr_pct = 0.3  # 最低0.3%
             except Exception:
                 pass
+            # === 趨勢過濾器：EMA20/EMA60判斷下跌趨勢 ===
+            _is_downtrend = False
+            try:
+                _hist_prices = np.asarray(market.history[product][-60:], dtype=float)
+                if len(_hist_prices) >= 20:
+                    # EMA計算
+                    def _ema(arr, period):
+                        k = 2 / (period + 1)
+                        e = arr[0]
+                        for v in arr[1:]:
+                            e = v * k + e * (1 - k)
+                        return e
+                    _ema20 = _ema(_hist_prices[-20:], 20) if len(_hist_prices) >= 20 else _hist_prices[-1]
+                    _ema60 = _ema(_hist_prices, 60) if len(_hist_prices) >= 60 else _ema(_hist_prices[-20:], 20)
+                    _cur_price = float(q.bid)
+                    # 下跌趨勢：EMA20 < EMA60 且 價格在EMA20下方
+                    _is_downtrend = (_ema20 < _ema60) and (_cur_price < _ema20)
+            except Exception:
+                pass
+
             frame = market_frame(product, market.history[product], q.bid, q.ask, macd=macd, strategy=strategy.to_dict(), czsc=czsc_obs)
             # 神經模擬超時機制：超過60秒自動跳過，避免無限循環卡住整個交易循環
             # 使用全局持久化 executor，不使用 with 語句（避免 shutdown(wait=True) 阻塞）
@@ -550,12 +570,13 @@ def main():
             _time_since_trade = time.time() - last_trade_time if last_trade_time > 0 else 9999
             _in_cooldown = _time_since_trade < _global_cooldown
 
-            # 加倉限制：已有持倉時，需比均價低6%才能加倉(購買後不追高)，最多10顆BTC
-            _max_position = 10.0
+            # 加倉限制：已有持倉時，需比均價低6%才能加倉(購買後不追高)，最多加倉2次
+            # 下跌趨勢中禁止馬丁格爾加倉，只做短線反彈
+            _max_add_count = 2  # 最多加倉2次，避免無限攤平
             _add_position_threshold = 0.06  # 需跌6%才能加倉
-            _can_add_position = True
-            if has_position and pos_qty > 0:
-                if pos_qty >= _max_position:
+            _can_add_position = not _is_downtrend  # 下跌趨勢禁止加倉
+            if has_position and pos_qty > 0 and not _is_downtrend:
+                if add_count >= _max_add_count:
                     _can_add_position = False
                 elif avg_entry_price > 0 and current_price > avg_entry_price * (1 - _add_position_threshold):
                     _can_add_position = False
@@ -563,6 +584,9 @@ def main():
             if chan_strategy is not None and chan_result is not None:
                 fly_natural_side = neural.get("side", "HOLD")
                 chan_sig = chan_result.get("signal", "HOLD")
+                # 下跌趨勢：只在RSI<30超賣時考慮小倉反彈，且TP改為3%
+                if _is_downtrend and chan_sig == "BUY" and rsi_latest > 30:
+                    chan_sig = "HOLD"  # RSI不夠低，不接飛刀
                 chan_reason = chan_result.get("reason", "")
                 fly_gate = neural.get("gate_spikes", 0)
                 fly_diff = abs(neural.get("right_hz", 0) - neural.get("left_hz", 0))
@@ -592,8 +616,17 @@ def main():
                 if chan_czsc:
                     chan_summary += f" {chan_czsc}"
 
+                # TP3止盈：價格達到TP3(均價+1.5%)立即賣出，不等纏論
+                _tp3_pct = 0.03 if _is_downtrend else 0.015  # 下跌趨勢反彈3%就跑
+                _tp3_price = avg_entry_price * (1 + _tp3_pct) if avg_entry_price > 0 else 0
+                if has_position and _tp3_price > 0 and current_price >= _tp3_price:
+                    neural["side"] = "SELL"
+                    neural["fly_side"] = fly_natural_side
+                    neural["chan_side"] = chan_sig
+                    _pnl_pct = (current_price - avg_entry_price) / avg_entry_price * 100
+                    neural["decision_note"] = f"[TP3止盈] 均價${avg_entry_price:.2f} 現價${current_price:.2f} 達到TP3(${_tp3_price:.2f})，全數出清，盈虧{_pnl_pct:+.3f}%"
                 # 纏論賣出模式：有持倉時，纏論指示SELL就全數出清
-                if has_position and chan_sig == "SELL":
+                elif has_position and chan_sig == "SELL":
                     # 纏論指示賣出，全數出清
                     neural["side"] = "SELL"
                     neural["fly_side"] = fly_natural_side
@@ -721,10 +754,10 @@ def main():
                     else:
                         _sell_pct = neural.get("sell_pct", 1.0)
                         _pos_qty = float(ledger.positions.get(product, 0))
-                        if _sell_pct < 1.0 and _pos_qty > 0:
-                            guard.strategy_budget = _pos_qty * _sell_pct * current_price
+                        if _pos_qty > 0:
+                            guard.strategy_budget = _pos_qty * _sell_pct * current_price * 1.01  # sell all position with 1% buffer
                         else:
-                            guard.strategy_budget = float(ledger.cash)  # sell all
+                            guard.strategy_budget = 0
                     order = action.invoke({"product": product, "side": neural["side"]})
                     guard.strategy_budget = None
                 except Veto as e:
@@ -738,6 +771,12 @@ def main():
                 if exec_side == "BUY":
                     last_buy_time = time.time()
                     tp_stage = 0  # track buy time for min hold
+                    if has_position:
+                        add_count += 1  # 加倉次數+1
+                    else:
+                        add_count = 0  # 新倉重置計數
+                if exec_side == "SELL":
+                    add_count = 0  # 賣出後重置加倉計數
                 # After sell, reset grid reference to current price
                 if exec_side == "SELL":
                     grid_ref_price = current_price
@@ -761,10 +800,13 @@ def main():
                     new_qty = pos_qty - exec_qty
                     if new_qty <= 0.0001:
                         avg_entry_price = 0.0
+            add_count = 0  # 加倉次數計數
             # Add TP levels and avg entry to neural for UI display
-            neural["tp1"] = round(avg_entry_price * 1.005, 2) if avg_entry_price > 0 else None
-            neural["tp2"] = round(avg_entry_price * 1.010, 2) if avg_entry_price > 0 else None
-            neural["tp3"] = round(avg_entry_price * 1.015, 2) if avg_entry_price > 0 else None
+            _tp_disp_pct = 0.03 if _is_downtrend else 0.015
+            neural["tp1"] = round(avg_entry_price * (1 + _tp_disp_pct*0.33), 2) if avg_entry_price > 0 else None
+            neural["tp2"] = round(avg_entry_price * (1 + _tp_disp_pct*0.66), 2) if avg_entry_price > 0 else None
+            neural["tp3"] = round(avg_entry_price * (1 + _tp_disp_pct), 2) if avg_entry_price > 0 else None
+            neural["trend"] = "下跌" if _is_downtrend else "震盪/上漲" 
             neural["avg_entry"] = round(avg_entry_price, 2) if avg_entry_price > 0 else None
             neural["atr_pct"] = round(_atr_pct, 2)
             neural["regime"] = "震盪盤" if _is_ranging else "趨勢盤"
