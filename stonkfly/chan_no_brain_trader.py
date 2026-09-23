@@ -158,21 +158,36 @@ class ChanNoBrainTrader:
                 return {"action": "HOLD", "reason": f"持有中 RSI{rsi:.0f} 高點{self.highest_since_entry:.2f}"}
             return {"action": "WAIT", "reason": f"等待底分型 RSI{rsi:.0f} {trend}"}
 
-        latest_fractal = fractals[-1]
-        ftype = latest_fractal.get("type", "")
-        findex = latest_fractal.get("index", -1)
-        fconfirmed = latest_fractal.get("confirmed", True)
+        # 找最近的底分型和頂分型（不一定是最新一個）
+        latest_bottom = None
+        latest_top = None
+        for f in reversed(fractals):
+            if f.get("type") == "bottom" and latest_bottom is None:
+                latest_bottom = f
+            if f.get("type") == "top" and latest_top is None:
+                latest_top = f
+            if latest_bottom and latest_top:
+                break
 
-        # ===== 買入：確認底分型 + RSI<35 + 不是下跌趨勢 =====
-        if self.position <= 0 and ftype == "bottom" and fconfirmed:
+        # ===== 買入：最近底分型 + RSI過濾 =====
+        if self.position <= 0 and latest_bottom is not None:
+            ftype = "bottom"
+            findex = latest_bottom.get("index", -1)
+            fconfirmed = latest_bottom.get("confirmed", True)
             if findex == self.last_buy_signal_index:
                 return {"action": "WAIT", "reason": "已處理此底分型"}
-            # 更嚴格的RSI過濾
-            if rsi > 35:
-                return {"action": "WAIT", "reason": f"RSI{rsi:.0f}>35 等超賣"}
-            # 下跌趨勢不接刀
-            if trend == "downtrend" and percentile > 20:
-                return {"action": "WAIT", "reason": f"下跌趨勢 百分位{percentile:.0f}%"}
+            # 趨勢感知RSI過濾：上漲中放寬，下跌中嚴格
+            if trend == "uptrend":
+                _rsi_limit = 65  # 上漲趨勢回調即可買
+            elif trend == "neutral":
+                _rsi_limit = 55  # 震盪中等要求
+            else:
+                _rsi_limit = 40  # 下跌趨勢要超賣才買
+            if rsi > _rsi_limit:
+                return {"action": "WAIT", "reason": f"RSI{rsi:.0f}>{_rsi_limit}({trend}) 等回調"}
+            # 下跌趨勢：百分位<50%才考慮（避免追高）
+            if trend == "downtrend" and percentile > 50:
+                return {"action": "WAIT", "reason": f"下跌趨勢 百分位{percentile:.0f}% 過高"}
 
             avail = self.cash_provider() if self.cash_provider else self.cash
             buy_amount = min(avail, avail)
@@ -194,17 +209,20 @@ class ChanNoBrainTrader:
                 return {"action": "BUY", "price": current_price, "qty": qty,
                         "signal": f"底分型買入 RSI{rsi:.0f} {trend}"}
 
-        # ===== 賣出：確認頂分型 + RSI>50 + 有最小利潤 =====
-        if self.position > 0 and ftype == "top" and fconfirmed:
+        # ===== 賣出：最近頂分型 + RSI過濾 + 有最小利潤 =====
+        if self.position > 0 and latest_top is not None:
+            ftype = "top"
+            findex = latest_top.get("index", -1)
+            fconfirmed = latest_top.get("confirmed", True)
             if findex == self.last_sell_signal_index:
                 return {"action": "HOLD", "reason": "已處理此頂分型"}
             unrealized = (current_price - self.avg_entry) * self.position
             # 虧損時不因頂分型賣出
             if unrealized < 0:
                 return {"action": "HOLD", "reason": f"頂分型但虧損{unrealized:+.2f} 等反彈/止損"}
-            # RSI<50 時不賣（可能還在漲）
-            if rsi < 50:
-                return {"action": "HOLD", "reason": f"RSI{rsi:.0f}<50 續抱等更高"}
+            # RSI<45 時不賣（可能還在漲）
+            if rsi < 45:
+                return {"action": "HOLD", "reason": f"RSI{rsi:.0f}<45 續抱等更高"}
             # 利潤太小不賣
             if current_price < self.avg_entry * (1 + self.min_profit_pct):
                 return {"action": "HOLD", "reason": f"利潤<0.3% 續抱"}
