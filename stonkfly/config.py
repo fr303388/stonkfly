@@ -49,7 +49,7 @@ class Settings:
         if (
             not self.products
             or len(set(self.products)) != len(self.products)
-            or not set(self.products) <= set(("BTC-USDT", "ETH-USDT", "BNB-USDT", "SOL-USDT", "ZEC-USDT", "ADA-USDT", "AVAX-USDT", "DOT-USDT", "LINK-USDT", "LTC-USDT", "NEAR-USDT", "ATOM-USDT", "ARB-USDT", "OP-USDT", "INJ-USDT", "SUI-USDT", "SEI-USDT", "DOGE-USDT", "SHIB-USDT", "PEPE-USDT", "WIF-USDT", "FLOKI-USDT", "BONK-USDT"))
+            or not set(self.products) <= set(("BTC-USDT", "ETH-USDT", "BNB-USDT", "SOL-USDT", "ZEC-USDT", "ADA-USDT", "AVAX-USDT", "DOT-USDT", "LINK-USDT", "LTC-USDT", "NEAR-USDT", "ATOM-USDT", "ARB-USDT", "OP-USDT", "INJ-USDT", "SUI-USDT", "SEI-USDT", "DOGE-USDT", "SHIB-USDT", "PEPE-USDT", "WIF-USDT", "FLOKI-USDT", "BONK-USDT", "WLD-USDT", "BCH-USDT", "PENGU-USDT"))
         ):
             raise ValueError("Only allowlisted USDC spot pairs")
         if not 0 < D(self.capital) or not 0 < D(self.order_limit) <= D(self.capital):

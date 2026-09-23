@@ -1,0 +1,5 @@
+C:\Users\ANGEL\Doubao\chats\2026-09-12\new-chat\stonkfly\monitor_pro.py:114: SyntaxWarning: invalid escape sequence '\p'
+  "del /q runs\paper\* >nul 2>&1",
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on http://127.0.0.1:8767
+Press CTRL+C to quit

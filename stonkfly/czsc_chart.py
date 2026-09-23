@@ -115,7 +115,15 @@ def extract_czsc_structures(klines, freq="15m"):
     bi_list = czsc_obj.bi_list or []
     for bi in bi_list:
         try:
-            direction = "up" if "多" in str(getattr(bi, 'direction', '')) or "up" in str(getattr(bi, 'direction', '')).lower() else "down"
+            # 方向判斷：CZSC Direction enum 的字串是「向上」「向下」
+            dir_val = getattr(bi, 'direction', None)
+            dir_str = str(dir_val)
+            if '上' in dir_str or 'up' in dir_str.lower() or '多' in dir_str:
+                direction = "up"
+            elif '下' in dir_str or 'down' in dir_str.lower() or '空' in dir_str:
+                direction = "down"
+            else:
+                direction = "down"
             sdt = getattr(bi, 'sdt', None)
             edt = getattr(bi, 'edt', None)
             s_price = float(getattr(bi, 'low', 0) if direction == "up" else getattr(bi, 'high', 0))

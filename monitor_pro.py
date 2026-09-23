@@ -20,7 +20,18 @@ from pathlib import Path
 import numpy as np
 from flask import Flask, jsonify, send_file, make_response, send_from_directory, request
 
+# Load .env file at startup
+def _load_env():
+    import os
+    env_path = Path(__file__).parent / ".env"
+    if env_path.exists():
+        for line in env_path.read_text(encoding="utf-8-sig").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, _, val = line.partition("=")
+                os.environ[key.strip()] = val.strip()
 
+_load_env()
 
 def _get_current_symbol():
     """Read current trading pair from latest.json, default ZECUSDT."""
@@ -109,7 +120,124 @@ def api_switch():
     Path(bat_path).write_text("\r\n".join(lines), encoding="gbk")
     subprocess.Popen(["cmd", "/c", bat_path], creationflags=0x00000008)
 
-    return jsonify({"ok": True, "pair": pair, "capital": capital, "msg": "??銝?.."})
+    return jsonify({"ok": True, "pair": pair, "capital": capital, "msg": "切換中..."})
+
+@app.route("/api/telegram/test", methods=["POST"])
+def api_telegram_test():
+    import sys, os
+    sys.path.insert(0, str(Path(__file__).parent.resolve()))
+    data = request.get_json(force=True, silent=True) or {}
+    token = data.get("token", "").strip() or os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    chat_id = data.get("chat_id", "").strip() or os.environ.get("TELEGRAM_CHAT_ID", "")
+    enabled = data.get("enabled", os.environ.get("TELEGRAM_ENABLED", "false") == "true")
+    if not enabled:
+        return jsonify({"ok": False, "error": "請先勾選啟用"})
+    if not token:
+        return jsonify({"ok": False, "error": "請輸入 Bot Token"})
+    if not chat_id:
+        return jsonify({"ok": False, "error": "請輸入 Chat ID"})
+    os.environ["TELEGRAM_BOT_TOKEN"] = token
+    os.environ["TELEGRAM_CHAT_ID"] = chat_id
+    os.environ["TELEGRAM_ENABLED"] = "true"
+    from stonkfly.telegram_notify import send_telegram
+    ok = send_telegram("✅ StonkFly 通知測試成功！\n之後買賣都會自動通知你～")
+    return jsonify({"ok": ok, "error": None if ok else "發送失敗，請檢查 Token 和 Chat ID"})
+
+@app.route("/api/telegram/get_chat_id", methods=["POST"])
+def api_telegram_get_chat_id():
+    import os, json, urllib.request
+    data = request.get_json(force=True, silent=True) or {}
+    token = data.get("token", "").strip() or os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    if not token:
+        return jsonify({"ok": False, "error": "請先輸入 Bot Token"})
+    try:
+        url = f"https://api.telegram.org/bot{token}/getUpdates"
+        with urllib.request.urlopen(url, timeout=10) as resp:
+            result = json.loads(resp.read().decode("utf-8"))
+        if result.get("ok") and result.get("result"):
+            latest = result["result"][-1]
+            chat = latest.get("message", {}).get("chat", {}) or latest.get("channel_post", {}).get("chat", {})
+            chat_id = chat.get("id")
+            username = chat.get("username", "")
+            first_name = chat.get("first_name", "")
+            if chat_id:
+                return jsonify({"ok": True, "chat_id": str(chat_id), "username": username, "first_name": first_name})
+        return jsonify({"ok": False, "error": "尚未讀取到訊息，請先在Telegram傳一句話給 @STONKFLY_trade_Bot"})
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"抓取失敗: {str(e)}"})
+
+@app.route("/api/telegram/save", methods=["POST"])
+def api_telegram_save():
+    import os
+    data = request.get_json(force=True)
+    token = data.get("token", "").strip()
+    chat_id = data.get("chat_id", "").strip()
+    enabled = data.get("enabled", False)
+    env_path = Path(__file__).parent / ".env"
+    lines = []
+    if env_path.exists():
+        lines = env_path.read_text(encoding="utf-8-sig").splitlines()
+    lines = [l for l in lines if not l.startswith("TELEGRAM_")]
+    lines.append(f"TELEGRAM_ENABLED={'true' if enabled else 'false'}")
+    if token:
+        lines.append(f"TELEGRAM_BOT_TOKEN={token}")
+    if chat_id:
+        lines.append(f"TELEGRAM_CHAT_ID={chat_id}")
+    env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    os.environ["TELEGRAM_ENABLED"] = "true" if enabled else "false"
+    if token:
+        os.environ["TELEGRAM_BOT_TOKEN"] = token
+    if chat_id:
+        os.environ["TELEGRAM_CHAT_ID"] = chat_id
+    return jsonify({"ok": True, "enabled": enabled})
+
+@app.route("/api/telegram/status", methods=["GET"])
+def api_telegram_status():
+    import os
+    return jsonify({
+        "enabled": os.environ.get("TELEGRAM_ENABLED", "false") == "true",
+        "token": os.environ.get("TELEGRAM_BOT_TOKEN", ""),
+        "chat_id": os.environ.get("TELEGRAM_CHAT_ID", ""),
+    })
+
+
+
+
+
+@app.route("/api/fractal_bot/summary", methods=["GET"])
+def api_fractal_summary():
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent.resolve()))
+    try:
+        from stonkfly.fractal_multi_bot import get_summary
+        return jsonify(get_summary())
+    except Exception as e:
+        return jsonify({"bots": [], "error": str(e)})
+
+@app.route("/api/fractal_bot/notify", methods=["POST"])
+def api_fractal_notify():
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent.resolve()))
+    try:
+        from stonkfly.fractal_multi_bot import set_notification
+        data = request.get_json(force=True)
+        enabled = data.get("enabled", True)
+        result = set_notification(bool(enabled))
+        return jsonify({"ok": True, **result})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
+
+@app.route("/api/telegram/reset", methods=["POST"])
+def api_telegram_reset():
+    import os
+    env_path = Path(__file__).parent / ".env"
+    if env_path.exists():
+        lines_env = env_path.read_text(encoding="utf-8-sig").splitlines()
+        lines_env = [l for l in lines_env if not l.startswith("TELEGRAM_")]
+        env_path.write_text("\n".join(lines_env) + "\n", encoding="utf-8")
+    for key in ["TELEGRAM_ENABLED", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"]:
+        os.environ.pop(key, None)
+    return jsonify({"ok": True})
 
 app.errorhandler(Exception)
 def handle_all_errors(e):

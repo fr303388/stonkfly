@@ -1,0 +1,389 @@
+"""
+多幣種分型交易機器人（模擬）
+使用纏論分型訊號對 BTC ETH SOL ZEC PEPE DOGE WLD 進行模擬交易
+只交易啟動後新形成的分型，加入RSI過濾和冷卻時間
+買賣即時發送 Telegram 通知
+"""
+import os
+import json
+import time
+import urllib.request
+import urllib.parse
+from pathlib import Path
+from datetime import datetime, timezone, timedelta
+
+UTC8 = timezone(timedelta(hours=8))
+
+SYMBOLS = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "DOGEUSDT", "WLDUSDT", "PEPEUSDT", "ZECUSDT"]
+INITIAL_CASH = 1000.0  # 每個幣種初始資金
+STATE_FILE = Path(__file__).parent.parent / "runs" / "paper" / "fractal_multi_state.json"
+CHECK_INTERVAL = 60  # 秒
+COOLDOWN_AFTER_TRADE = 300  # 交易後冷卻5分鐘
+TELEGRAM_NOTIFY_DEFAULT = os.environ.get("TELEGRAM_NOTIFY_FRACTAL", "true").lower() == "true"
+RSI_OVERSOLD = 35  # RSI低於此值才考慮買入
+RSI_OVERBOUGHT = 65  # RSI高於此值才考慮賣出
+
+
+def _load_env():
+    """載入 .env 環境變數"""
+    candidates = [
+        Path(__file__).parent.parent / ".env",
+        Path.cwd() / ".env",
+    ]
+    for env_path in candidates:
+        if env_path.exists():
+            try:
+                for line in env_path.read_text(encoding="utf-8-sig").splitlines():
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        key, _, val = line.partition("=")
+                        os.environ.setdefault(key.strip(), val.strip())
+                break
+            except Exception:
+                pass
+
+
+def fmt_price(price: float) -> str:
+    """價格格式化：≥1000→0位，≥100→2位，≥1→4位，<1→6位"""
+    if price >= 1000:
+        return f"${price:,.0f}"
+    elif price >= 100:
+        return f"${price:,.2f}"
+    elif price >= 1:
+        return f"${price:,.4f}"
+    else:
+        return f"${price:,.6f}"
+
+
+def send_telegram(message: str) -> bool:
+    """發送 Telegram 訊息"""
+    _load_env()
+    token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID", "")
+    enabled = os.environ.get("TELEGRAM_ENABLED", "false").lower() == "true"
+    if not enabled or not token or not chat_id:
+        return False
+    try:
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        data = urllib.parse.urlencode({
+            "chat_id": chat_id,
+            "text": message,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": "true"
+        }).encode("utf-8")
+        req = urllib.request.Request(url, data=data, method="POST")
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return resp.status == 200
+    except Exception:
+        return False
+
+
+def fetch_klines(symbol: str, interval: str = "5m", limit: int = 100) -> list:
+    """從幣安抓取K線"""
+    url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
+    try:
+        with urllib.request.urlopen(url, timeout=10) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        return [{"time": k[0] / 1000, "open": float(k[1]), "high": float(k[2]),
+                 "low": float(k[3]), "close": float(k[4]), "volume": float(k[5])} for k in data]
+    except Exception as e:
+        print(f"[{symbol}] 抓取K線失敗: {e}")
+        return []
+
+
+def calc_rsi(klines: list, period: int = 14) -> float:
+    """計算RSI"""
+    if len(klines) < period + 1:
+        return 50.0
+    gains = []
+    losses = []
+    for i in range(1, len(klines)):
+        change = klines[i]["close"] - klines[i-1]["close"]
+        if change > 0:
+            gains.append(change)
+            losses.append(0)
+        else:
+            gains.append(0)
+            losses.append(abs(change))
+    avg_gain = sum(gains[-period:]) / period
+    avg_loss = sum(losses[-period:]) / period
+    if avg_loss == 0:
+        return 100.0
+    rs = avg_gain / avg_loss
+    return 100 - (100 / (1 + rs))
+
+
+def detect_latest_fractal(klines: list) -> dict:
+    """偵測最新的分型（只看倒數第3根，需要左右各一根確認）"""
+    if len(klines) < 5:
+        return None
+
+    # 只檢查倒數第3根（需要i-1, i, i+1三根確認，i+2用於加強確認）
+    i = len(klines) - 3  # 倒數第3根，已完成且有右邊確認
+
+    # 頂分型：中間最高，左右都低
+    is_top = (klines[i]["high"] > klines[i-1]["high"] and
+              klines[i]["high"] > klines[i+1]["high"] and
+              klines[i-1]["high"] > klines[i-2]["high"] and
+              klines[i+1]["high"] > klines[i+2]["high"])
+
+    # 底分型：中間最低，左右都高
+    is_bottom = (klines[i]["low"] < klines[i-1]["low"] and
+                 klines[i]["low"] < klines[i+1]["low"] and
+                 klines[i-1]["low"] < klines[i-2]["low"] and
+                 klines[i+1]["low"] < klines[i+2]["low"])
+
+    if is_top:
+        return {"type": "top", "price": klines[i]["high"], "time": klines[i]["time"], "index": i}
+    if is_bottom:
+        return {"type": "bottom", "price": klines[i]["low"], "time": klines[i]["time"], "index": i}
+    return None
+
+
+def load_state() -> dict:
+    """載入多幣種狀態"""
+    if STATE_FILE.exists():
+        try:
+            with open(STATE_FILE, 'r', encoding='utf-8') as f:
+                state = json.load(f)
+            # 確保所有幣種都有狀態
+            for sym in SYMBOLS:
+                if sym not in state["symbols"]:
+                    state["symbols"][sym] = {
+                        "cash": INITIAL_CASH, "position": 0, "avg_entry": 0,
+                        "trades": [], "last_fractal_time": 0, "realized_pnl": 0,
+                        "last_trade_time": 0, "warmed_up": False,
+                    }
+                # 確保新欄位存在
+                s = state["symbols"][sym]
+                s.setdefault("last_trade_time", 0)
+                s.setdefault("warmed_up", False)
+                s.setdefault("last_check_time", 0)
+                s.setdefault("current_rsi", 0)
+                s.setdefault("current_price", 0)
+                s.setdefault("latest_fractal", None)
+                s.setdefault("last_action", "待機中")
+                s.setdefault("activity_log", [])
+                s.setdefault("notify_enabled", TELEGRAM_NOTIFY_DEFAULT)
+            return state
+        except Exception:
+            pass
+    # 初始化
+    state = {"symbols": {}, "start_time": datetime.now(UTC8).timestamp()}
+    for sym in SYMBOLS:
+        state["symbols"][sym] = {
+            "cash": INITIAL_CASH,
+            "position": 0,
+            "avg_entry": 0,
+            "trades": [],
+            "last_fractal_time": 0,
+            "realized_pnl": 0,
+            "last_trade_time": 0,
+            "warmed_up": False,
+            "last_check_time": 0,
+            "current_rsi": 0,
+            "current_price": 0,
+            "latest_fractal": None,
+            "last_action": "待機中",
+            "activity_log": [],
+            "notify_enabled": TELEGRAM_NOTIFY_DEFAULT,
+        }
+    return state
+
+
+def save_state(state: dict):
+    """儲存狀態"""
+    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(STATE_FILE, 'w', encoding='utf-8') as f:
+        json.dump(state, f, ensure_ascii=False, indent=2)
+
+
+def run_cycle():
+    """執行一輪檢查"""
+    state = load_state()
+    now = datetime.now(UTC8)
+    now_ts = now.timestamp()
+    notify_enabled = state.get("notify_enabled", TELEGRAM_NOTIFY_DEFAULT)
+
+    for sym in SYMBOLS:
+        klines = fetch_klines(sym, "5m", 100)
+        if len(klines) < 20:
+            continue
+
+        sym_state = state["symbols"][sym]
+        current_price = klines[-1]["close"]
+        rsi = calc_rsi(klines)
+        sym_state["current_rsi"] = round(rsi, 1)
+        sym_state["current_price"] = current_price
+        sym_state["last_check_time"] = now_ts
+
+        # 暖機：第一次執行只記錄最新分型時間，不交易
+        if not sym_state["warmed_up"]:
+            fractal = detect_latest_fractal(klines)
+            if fractal:
+                sym_state["last_fractal_time"] = fractal["time"]
+            sym_state["warmed_up"] = True
+            sym_state["last_action"] = f"暖機完成 RSI={rsi:.0f}"
+            sym_state["activity_log"].append({"time": now_ts, "msg": f"暖機完成，RSI={rsi:.0f}"})
+            if len(sym_state["activity_log"]) > 10:
+                sym_state["activity_log"] = sym_state["activity_log"][-10:]
+            print(f"[{sym}] 暖機完成，RSI={rsi:.1f}")
+            continue
+
+        # 冷卻檢查
+        cooldown_left = COOLDOWN_AFTER_TRADE - (now_ts - sym_state["last_trade_time"])
+        if cooldown_left > 0:
+            sym_state["last_action"] = f"冷卻中 {int(cooldown_left)}s"
+            continue
+
+        # 偵測最新分型
+        fractal = detect_latest_fractal(klines)
+        sym_state["latest_fractal"] = fractal
+        if not fractal:
+            sym_state["last_action"] = f"觀察中 RSI={rsi:.0f}"
+            continue
+
+        # 避免重複交易同一根分型
+        if fractal["time"] <= sym_state["last_fractal_time"]:
+            sym_state["last_action"] = f"已處理分型 RSI={rsi:.0f}"
+            continue
+
+        # 確認分型是新形成的（分型K線時間在最近3根內）
+        fractal_age = len(klines) - 1 - fractal["index"]
+        if fractal_age > 3:
+            sym_state["last_action"] = f"分型過舊({fractal_age}根) RSI={rsi:.0f}"
+            continue
+
+        sym_state["last_fractal_time"] = fractal["time"]
+
+        # 底分型 → 買入（需RSI超賣確認）
+        if fractal["type"] == "bottom" and sym_state["position"] == 0:
+            if rsi > RSI_OVERSOLD:
+                sym_state["last_action"] = f"底分型但RSI={rsi:.0f}偏高"
+                sym_state["activity_log"].append({"time": now_ts, "msg": f"底分型RSI={rsi:.0f}，未達{RSI_OVERSOLD}"})
+                if len(sym_state["activity_log"]) > 10:
+                    sym_state["activity_log"] = sym_state["activity_log"][-10:]
+                print(f"[{sym}] 底分型但RSI={rsi:.1f}不夠低，跳過")
+                continue
+            buy_amount = min(sym_state["cash"], INITIAL_CASH * 0.5)
+            if buy_amount > 10:
+                qty = buy_amount / current_price
+                sym_state["cash"] -= buy_amount
+                sym_state["position"] = qty
+                sym_state["avg_entry"] = current_price
+                sym_state["last_trade_time"] = now_ts
+                trade = {
+                    "time": now_ts, "side": "BUY", "price": current_price,
+                    "qty": qty, "amount": buy_amount,
+                    "reason": f"底分型+RSI{rsi:.0f}超賣",
+                    "pnl": 0,
+                }
+                sym_state["last_action"] = f"✅ 買入 ${current_price:.2f}"
+                sym_state["activity_log"].append({"time": now_ts, "msg": f"買入 ${current_price:.2f} RSI={rsi:.0f}"})
+                if len(sym_state["activity_log"]) > 10:
+                    sym_state["activity_log"] = sym_state["activity_log"][-10:]
+                sym_state["trades"].append(trade)
+                msg = (f"🟢 <b>分型機器人 買入 [模擬]</b>\n"
+                       f"⏰ {now.strftime('%H:%M:%S')} UTC+8\n"
+                       f"📊 {sym.replace('USDT', '/USDT')}\n"
+                       f"💰 價格: {fmt_price(current_price)}\n"
+                       f"💵 金額: ${buy_amount:,.2f}\n"
+                       f"📦 數量: {qty:.6f}\n"
+                       f"📝 底分型確認 + RSI {rsi:.1f} 超賣")
+                if notify_enabled:
+                    send_telegram(msg)
+                print(f"[{sym}] 買入 @ ${current_price:.4f} RSI={rsi:.1f}")
+
+        # 頂分型 → 賣出（需RSI超買確認）
+        elif fractal["type"] == "top" and sym_state["position"] > 0:
+            if rsi < RSI_OVERBOUGHT:
+                sym_state["last_action"] = f"頂分型但RSI={rsi:.0f}偏低"
+                sym_state["activity_log"].append({"time": now_ts, "msg": f"頂分型RSI={rsi:.0f}，未達{RSI_OVERBOUGHT}"})
+                if len(sym_state["activity_log"]) > 10:
+                    sym_state["activity_log"] = sym_state["activity_log"][-10:]
+                print(f"[{sym}] 頂分型但RSI={rsi:.1f}不夠高，跳過")
+                continue
+            sell_qty = sym_state["position"]
+            sell_amount = sell_qty * current_price
+            pnl = (current_price - sym_state["avg_entry"]) * sell_qty
+            sym_state["cash"] += sell_amount
+            sym_state["position"] = 0
+            sym_state["realized_pnl"] += pnl
+            sym_state["last_trade_time"] = now_ts
+            trade = {
+                "time": now_ts, "side": "SELL", "price": current_price,
+                "qty": sell_qty, "amount": sell_amount,
+                "reason": f"頂分型+RSI{rsi:.0f}超買",
+                "pnl": pnl,
+            }
+            sym_state["last_action"] = f"✅ 賣出 ${current_price:.2f} {'+' if pnl>0 else ''}${pnl:.2f}"
+            sym_state["activity_log"].append({"time": now_ts, "msg": f"賣出 ${current_price:.2f} PnL={'+' if pnl>0 else ''}${pnl:.2f}"})
+            if len(sym_state["activity_log"]) > 10:
+                sym_state["activity_log"] = sym_state["activity_log"][-10:]
+            sym_state["trades"].append(trade)
+            pnl_emoji = "📈" if pnl > 0 else "📉"
+            msg = (f"🔴 <b>分型機器人 賣出 [模擬]</b>\n"
+                   f"⏰ {now.strftime('%H:%M:%S')} UTC+8\n"
+                   f"📊 {sym.replace('USDT', '/USDT')}\n"
+                   f"💰 價格: {fmt_price(current_price)}\n"
+                   f"💵 金額: ${sell_amount:,.2f}\n"
+                   f"{pnl_emoji} 盈虧: {'+' if pnl > 0 else ''}${pnl:,.4f}\n"
+                   f"📝 頂分型確認 + RSI {rsi:.1f} 超買")
+            if notify_enabled:
+                send_telegram(msg)
+            print(f"[{sym}] 賣出 @ ${current_price:.4f} PnL: ${pnl:.4f} RSI={rsi:.1f}")
+
+    save_state(state)
+    return state
+
+
+def set_notification(enabled: bool) -> dict:
+    """設定分型機器人是否發送Telegram通知"""
+    state = load_state()
+    state["notify_enabled"] = enabled
+    save_state(state)
+    return {"notify_enabled": enabled}
+
+
+def get_summary() -> dict:
+    """取得所有幣種的摘要"""
+    state = load_state()
+    summary = []
+    for sym, s in state["symbols"].items():
+        sells = [t for t in s["trades"] if t["side"] == "SELL"]
+        wins = sum(1 for t in sells if t["pnl"] > 0)
+        losses = sum(1 for t in sells if t["pnl"] <= 0)
+        win_rate = (wins / len(sells) * 100) if sells else 0
+        summary.append({
+            "symbol": sym,
+            "cash": s["cash"],
+            "position": s["position"],
+            "avg_entry": s["avg_entry"],
+            "realized_pnl": s["realized_pnl"],
+            "total_trades": len(s["trades"]),
+            "win_rate": win_rate,
+            "has_position": s["position"] > 0,
+            "warmed_up": s.get("warmed_up", False),
+            "last_check_time": s.get("last_check_time", 0),
+            "current_rsi": s.get("current_rsi", 0),
+            "current_price": s.get("current_price", 0),
+            "latest_fractal": s.get("latest_fractal"),
+            "last_action": s.get("last_action", "待機中"),
+            "activity_log": s.get("activity_log", [])[-5:],
+            "notify_enabled": state.get("notify_enabled", TELEGRAM_NOTIFY_DEFAULT),
+        })
+    return {"bots": summary, "notify_enabled": state.get("notify_enabled", TELEGRAM_NOTIFY_DEFAULT), "updated": datetime.now(UTC8).timestamp()}
+
+
+if __name__ == "__main__":
+    print("分型機器人啟動（暖機模式），每60秒檢查一次，Telegram通知:", "開啟" if TELEGRAM_NOTIFY_DEFAULT else "關閉")
+    print("規則：只交易啟動後新形成的分型 + RSI過濾 + 5分鐘冷卻")
+    _init_state = load_state()
+    if _init_state.get("notify_enabled", TELEGRAM_NOTIFY_DEFAULT):
+        send_telegram("⚙️ <b>分型機器人啟動</b>\n模擬交易 7 個幣種\n暖機後只交易新分型 + RSI過濾")
+    while True:
+        try:
+            run_cycle()
+        except Exception as e:
+            print(f"錯誤: {e}")
+        time.sleep(CHECK_INTERVAL)

@@ -435,7 +435,6 @@
       <option value="LTC-USDT">LTC/USDT</option>
       <option value="DOGE-USDT">DOGE/USDT</option>
       <option value="PEPE-USDT">PEPE/USDT</option>
-      <option value="HYPE-USDT">HYPE/USDT</option>
       <option value="WLD-USDT">WLD/USDT</option>
       <option value="BCH-USDT">BCH/USDT</option>
       <option value="PENGU-USDT">PENGU/USDT</option>
@@ -467,14 +466,328 @@
       <input type="checkbox" id="liveMode"> Live trading (real money)
     </label>
   </div>
+  <div style="margin-bottom:14px;padding:10px;border-radius:8px;background:#0a1a2a;border:1px solid #2a4a6a;">
+    <div style="font-size:11px;color:#5dade2;margin-bottom:6px;letter-spacing:1px;display:flex;justify-content:space-between;align-items:center;">
+      <span>📱 Telegram 通知</span>
+      <label style="cursor:pointer;font-size:11px;color:#0f0;">
+        <input type="checkbox" id="tgEnabled" onchange="toggleTgSettings()"> 啟用
+      </label>
+    </div>
+    <div id="tgFields" style="display:none;">
+      <!-- Configured status view -->
+      <div id="tgConfiguredView" style="display:none;">
+        <div style="background:#0a2a0a;border:1px solid #1a5a1a;border-radius:8px;padding:8px;margin-bottom:6px;">
+          <div style="color:#0f0;font-size:11px;font-weight:bold;margin-bottom:2px;">✅ 已設定完成</div>
+          <div style="color:#888;font-size:9px;" id="tgConfigInfo"></div>
+        </div>
+        <div style="display:flex;gap:4px;">
+          <button onclick="testTelegram()" style="flex:1;padding:6px;border-radius:6px;background:#1a3a1a;border:1px solid #2a5a2a;color:#0f0;cursor:pointer;font-size:10px;">🧪 測試</button>
+          <button onclick="showTgEdit()" style="flex:1;padding:6px;border-radius:6px;background:#2a2a1a;border:1px solid #5a5a2a;color:#ff0;cursor:pointer;font-size:10px;">✏️ 修改</button>
+          <button onclick="resetTelegram()" style="flex:1;padding:6px;border-radius:6px;background:#3a1a1a;border:1px solid #5a2a2a;color:#f66;cursor:pointer;font-size:10px;">🗑️ 重設</button>
+        </div>
+      </div>
+      <!-- Edit view -->
+      <div id="tgEditView">
+        <input id="tgToken" type="password" placeholder="Bot Token (from @BotFather)" autocomplete="off" 
+          style="width:100%;padding:6px;border-radius:6px;background:#111;border:1px solid #333;color:#5dade2;font-family:monospace;font-size:10px;outline:none;margin-bottom:4px;box-sizing:border-box;">
+        <div style="display:flex;gap:4px;margin-bottom:4px;">
+          <input id="tgChatId" type="text" placeholder="你的 Chat ID (按右邊抓取)" autocomplete="off" 
+            style="flex:1;padding:6px;border-radius:6px;background:#111;border:1px solid #333;color:#5dade2;font-family:monospace;font-size:10px;outline:none;box-sizing:border-box;">
+          <button onclick="fetchChatId()" style="padding:6px 10px;border-radius:6px;background:#2a4a6a;border:1px solid #3a6a9a;color:#5dade2;cursor:pointer;font-size:10px;white-space:nowrap;">🔍 抓取</button>
+        </div>
+        <div style="display:flex;gap:4px;">
+          <button onclick="saveTelegram()" style="flex:1;padding:6px;border-radius:6px;background:#1a3a5a;border:1px solid #2a5a8a;color:#5dade2;cursor:pointer;font-size:10px;">💾 儲存</button>
+          <button onclick="testTelegram()" style="flex:1;padding:6px;border-radius:6px;background:#1a3a1a;border:1px solid #2a5a2a;color:#0f0;cursor:pointer;font-size:10px;">🧪 測試</button>
+        </div>
+      </div>
+      <div id="tgStatus" style="margin-top:4px;font-size:10px;color:#888;"></div>
+      <div style="margin-top:8px;padding:8px;background:#0a0a1a;border:1px solid #1a1a3a;border-radius:8px;font-size:9px;color:#778;line-height:1.6;">
+        <div style="color:#5dade2;font-weight:bold;margin-bottom:4px;">📖 快速設定教學</div>
+        <div>1️⃣ 在Telegram搜尋 <b style="color:#aaa;">@BotFather</b>，輸入 /newbot 建立機器人，取得 Token</div>
+        <div>2️⃣ 搜尋你剛建立的機器人名稱，點進去傳一句話（例如 /start）</div>
+        <div>3️⃣ 在上方 Token 欄位貼上 BotFather 給的金鑰</div>
+        <div>4️⃣ 按 <b style="color:#5dade2;">🔍 抓取</b> 自動帶入你的 Chat ID</div>
+        <div>5️⃣ 按 <b style="color:#0f0;">🧪 測試</b> 確認能收到訊息，再按 💾 儲存</div>
+      </div>
+    </div>
+  </div>
+  <!-- 分型機器人通知開關 -->
+  <div style="margin-top:12px;padding:10px;background:#0a0a1a;border:1px solid #1a1a3a;border-radius:10px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-size:11px;color:#ff9f43;letter-spacing:1px;font-weight:700;">🤖 分型機器人通知</span>
+      <label style="position:relative;display:inline-block;width:40px;height:20px;cursor:pointer;">
+        <input type="checkbox" id="fractalNotifyToggle" style="opacity:0;width:0;height:0;" onchange="toggleFractalNotify()">
+        <span style="position:absolute;inset:0;background:#333;border-radius:20px;transition:0.3s;" id="fractalNotifySlider"></span>
+        <span style="position:absolute;height:16px;width:16px;left:2px;bottom:2px;background:#fff;border-radius:50%;transition:0.3s;" id="fractalNotifyDot"></span>
+      </label>
+    </div>
+    <div style="font-size:9px;color:#666;margin-top:4px;" id="fractalNotifyStatus">載入中...</div>
+  </div>
   <button onclick="applySettings()" style="width:100%;padding:10px;border-radius:10px;border:none;
-    background:linear-gradient(135deg,#00d2d3,#00ff88);color:#000;font-weight:900;font-size:14px;cursor:pointer;">
+    background:linear-gradient(135deg,#00d2d3,#00ff88);color:#000;font-weight:900;font-size:14px;cursor:pointer;margin-top:8px;">
     🔄 切換並重啟
   </button>
   <div id="setStatus" style="margin-top:8px;font-size:11px;color:#888;text-align:center;"></div>
 </div>
 
 <script>
+
+
+function showTgEdit() {
+  document.getElementById('tgConfiguredView').style.display = 'none';
+  document.getElementById('tgEditView').style.display = 'block';
+}
+function resetTelegram() {
+  if (!confirm('確定要刪除 Telegram 設定嗎？')) return;
+  fetch('/api/telegram/reset', {method: 'POST'})
+    .then(r => r.json()).then(d => {
+      statusEl.textContent = d.ok ? '✅ 已重設，請重新設定' : '❌ 失敗';
+      statusEl.style.color = d.ok ? '#0f0' : '#f00';
+      if (d.ok) {
+        document.getElementById('tgConfiguredView').style.display = 'none';
+        document.getElementById('tgEditView').style.display = 'block';
+        document.getElementById('tgToken').value = '';
+        document.getElementById('tgChatId').value = '';
+      }
+    }).catch(e => {
+      statusEl.textContent = '❌ 錯誤: ' + e;
+    });
+}
+function refreshTgStatus() {
+  fetch('/api/telegram/status').then(r => r.json()).then(d => {
+    const configured = d.token && d.chat_id;
+    document.getElementById('tgConfiguredView').style.display = configured ? 'block' : 'none';
+    document.getElementById('tgEditView').style.display = configured ? 'none' : 'block';
+    if (configured) {
+      document.getElementById('tgConfigInfo').textContent = 'Chat ID: ' + d.chat_id + ' | 通知: ' + (d.enabled ? '已啟用' : '已停用');
+    }
+  }).catch(() => {});
+}
+
+
+function refreshFractalBot() {
+  fetch('/api/fractal_bot/summary').then(r => r.json()).then(d => {
+    const topList = document.getElementById('fractalTopList');
+    const topStatus = document.getElementById('fractalTopStatus');
+    const topPnl = document.getElementById('fractalTotalPnl');
+    const logEl = document.getElementById('fractalActivityLog');
+    if (!topList || !topStatus || !topPnl) return;
+    if (d.error) {
+      topStatus.textContent = '未啟動';
+      topList.innerHTML = '<div style="color:#666;grid-column:1/-1;text-align:center;padding:8px;">分型機器人未運行</div>';
+      topPnl.textContent = '--';
+      topPnl.style.color = '#888';
+      return;
+    }
+    const bots = d.bots || [];
+    const totalPnl = bots.reduce((s, b) => s + (b.realized_pnl || 0), 0);
+    const activeCount = bots.filter(b => b.has_position).length;
+    const totalTrades = bots.reduce((s, b) => s + (b.total_trades || 0), 0);
+    const now = Date.now() / 1000;
+    const lastCheck = Math.max(...bots.map(b => b.last_check_time || 0));
+    const secAgo = lastCheck ? Math.floor(now - lastCheck) : '--';
+    topStatus.textContent = bots.length + '幣種·' + activeCount + '持倉·' + secAgo + 's前檢查';
+
+    // 緊湊狀態：每個幣種顯示 RSI + 動作 + 盈虧
+    topList.innerHTML = bots.map(b => {
+      const sym = b.symbol.replace('USDT', '');
+      const rsi = b.current_rsi || 0;
+      const price = b.current_price || 0;
+      const priceStr = price < 1 ? price.toFixed(4) : price < 100 ? price.toFixed(2) : price.toFixed(0);
+      // 日本風格：紅漲綠跌
+      let unrealized = 0;
+      if (b.has_position && b.current_price && b.avg_entry) {
+        unrealized = (b.current_price - b.avg_entry) * b.position;
+      }
+      const totalPnl = (b.realized_pnl || 0) + unrealized;
+      // 日式顏色：紅=上漲/獲利，綠=下跌/虧損
+      const pnlColor = totalPnl > 0 ? '#ff4757' : (totalPnl < 0 ? '#2ed573' : '#888');
+      const pnlSign = totalPnl > 0 ? '+' : '';
+      const posColor = b.has_position ? '#ff4757' : '#666';
+      const rsiColor = rsi > 65 ? '#ff4757' : (rsi < 35 ? '#2ed573' : '#aaa');
+      // 價格漲跌顏色（與前一根比較用RSI趨勢近似）
+      const priceColor = rsi > 50 ? '#ff4757' : '#2ed573';
+      return `<div style="padding:3px 5px;background:#0a0a0a;border:1px solid #333;font-family:'JetBrains Mono',monospace;" title="${sym}: RSI${rsi.toFixed(0)}">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;">
+          <span style="color:#ccc;font-size:9px;font-weight:700;letter-spacing:0.5px;">${sym}</span>
+          <span style="color:${priceColor};font-size:11px;font-weight:900;">${priceStr}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:2px;font-size:8px;">
+          <span style="color:${rsiColor};">RSI${rsi.toFixed(0)}</span>
+          <span style="color:${posColor};">${b.has_position ? '●' : '○'}</span>
+          <span style="color:${pnlColor};font-weight:700;">${pnlSign}${totalPnl.toFixed(0)}</span>
+        </div>
+      </div>`;
+    }).join('');
+
+    // 活動日誌：合併所有幣種最近活動
+    if (logEl) {
+      const allLogs = [];
+      bots.forEach(b => {
+        (b.activity_log || []).forEach(log => {
+          allLogs.push({...log, sym: b.symbol.replace('USDT', '')});
+        });
+      });
+      allLogs.sort((a, b) => b.time - a.time);
+      const recent = allLogs.slice(0, 8);
+      logEl.innerHTML = recent.map(log => {
+        const t = new Date(log.time * 1000);
+        const timeStr = t.getHours().toString().padStart(2,'0') + ':' + t.getMinutes().toString().padStart(2,'0') + ':' + t.getSeconds().toString().padStart(2,'0');
+        const logColor = log.msg.includes('買入') ? '#2ed573' : (log.msg.includes('賣出') ? '#ff4757' : '#666');
+        return `<div><span style="color:#444;">${timeStr}</span> <span style="color:#ff9f43;">${log.sym}</span> <span style="color:${logColor};">${log.msg}</span></div>`;
+      }).join('') || '<div style="color:#444;">等待活動...</div>';
+    }
+
+    const pnlColor = totalPnl > 0 ? '#ff4757' : (totalPnl < 0 ? '#2ed573' : '#888');
+    const pnlSign = totalPnl > 0 ? '+' : '';
+    topPnl.textContent = pnlSign + '$' + totalPnl.toFixed(2);
+    topPnl.style.color = pnlColor;
+  }).catch(() => {
+    const topStatus = document.getElementById('fractalTopStatus');
+    if (topStatus) topStatus.textContent = '離線';
+  });
+}
+
+function toggleFractalNotify() {
+  const toggle = document.getElementById('fractalNotifyToggle');
+  const status = document.getElementById('fractalNotifyStatus');
+  const slider = document.getElementById('fractalNotifySlider');
+  const dot = document.getElementById('fractalNotifyDot');
+  if (!toggle) return;
+  const enabled = toggle.checked;
+  fetch('/api/fractal_bot/notify', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({enabled: enabled})
+  }).then(r => r.json()).then(d => {
+    if (d.ok) {
+      status.textContent = enabled ? '✅ 已開啟通知' : '🔕 已關閉通知';
+      slider.style.background = enabled ? '#2ed573' : '#333';
+      dot.style.transform = enabled ? 'translateX(20px)' : 'translateX(0)';
+    }
+  }).catch(() => {
+    status.textContent = '設定失敗';
+  });
+}
+
+function loadFractalNotifyState() {
+  fetch('/api/fractal_bot/summary').then(r => r.json()).then(d => {
+    const toggle = document.getElementById('fractalNotifyToggle');
+    const status = document.getElementById('fractalNotifyStatus');
+    const slider = document.getElementById('fractalNotifySlider');
+    const dot = document.getElementById('fractalNotifyDot');
+    if (!toggle) return;
+    const enabled = d.notify_enabled !== false;
+    toggle.checked = enabled;
+    status.textContent = enabled ? '✅ 已開啟通知' : '🔕 已關閉通知';
+    slider.style.background = enabled ? '#2ed573' : '#333';
+    dot.style.transform = enabled ? 'translateX(20px)' : 'translateX(0)';
+  }).catch(() => {});
+}
+setTimeout(loadFractalNotifyState, 2000);
+
+function toggleFractalDetail() {
+  const el = document.getElementById('fractalDetail');
+  if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+setInterval(refreshFractalBot, 10000);
+setTimeout(refreshFractalBot, 2000);
+
+function toggleTgSettings() {
+  const enabled = document.getElementById('tgEnabled').checked;
+  document.getElementById('tgFields').style.display = enabled ? 'block' : 'none';
+  if (enabled) refreshTgStatus();
+}
+function saveTelegram() {
+  const token = document.getElementById('tgToken').value.trim();
+  const chat_id = document.getElementById('tgChatId').value.trim();
+  const enabled = document.getElementById('tgEnabled').checked;
+  const statusEl = document.getElementById('tgStatus');
+  if (!token) { statusEl.textContent = '❌ 請先輸入 Bot Token'; statusEl.style.color = '#f00'; return; }
+  if (!chat_id) { statusEl.textContent = '❌ 請先輸入 Chat ID'; statusEl.style.color = '#f00'; return; }
+  statusEl.textContent = '⏳ 儲存中...';
+  statusEl.style.color = '#ff0';
+  fetch('/api/telegram/save', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({token, chat_id, enabled})
+  }).then(r => r.json()).then(d => {
+    statusEl.textContent = d.ok ? '✅ 已儲存' : '❌ 儲存失敗';
+    statusEl.style.color = d.ok ? '#0f0' : '#f00';
+    if (d.ok) setTimeout(refreshTgStatus, 500);
+  }).catch(e => {
+    statusEl.textContent = '❌ 錯誤: ' + e;
+    statusEl.style.color = '#f00';
+  });
+}
+
+function fetchChatId() {
+  const token = document.getElementById('tgToken').value.trim();
+  const statusEl = document.getElementById('tgStatus');
+  if (!token) {
+    statusEl.textContent = '❌ 請先在上方輸入 Bot Token';
+    statusEl.style.color = '#f00';
+    return;
+  }
+  statusEl.textContent = '⏳ 抓取中...請先傳訊息給bot';
+  statusEl.style.color = '#ff0';
+  fetch('/api/telegram/get_chat_id', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({token})
+  }).then(r => r.json()).then(d => {
+    if (d.ok) {
+      document.getElementById('tgChatId').value = d.chat_id;
+      statusEl.textContent = '✅ 已抓取: ' + d.chat_id + (d.username ? ' (@' + d.username + ')' : '');
+      statusEl.style.color = '#0f0';
+    } else {
+      statusEl.textContent = '❌ ' + (d.error || '失敗');
+      statusEl.style.color = '#f00';
+    }
+  }).catch(e => {
+    statusEl.textContent = '❌ 錯誤: ' + e;
+    statusEl.style.color = '#f00';
+  });
+}
+
+function testTelegram() {
+  const token = document.getElementById('tgToken').value.trim();
+  const chat_id = document.getElementById('tgChatId').value.trim();
+  const enabled = document.getElementById('tgEnabled').checked;
+  const statusEl = document.getElementById('tgStatus');
+  if (!token) {
+    statusEl.textContent = '❌ 請先輸入 Bot Token';
+    statusEl.style.color = '#f00';
+    return;
+  }
+  if (!chat_id) {
+    statusEl.textContent = '❌ 請先輸入 Chat ID';
+    statusEl.style.color = '#f00';
+    return;
+  }
+  statusEl.textContent = '⏳ 測試中...';
+  statusEl.style.color = '#ff0';
+  fetch('/api/telegram/test', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({token, chat_id, enabled})
+  })
+    .then(r => r.json())
+    .then(d => {
+      statusEl.textContent = d.ok ? '✅ 測試成功！請查看Telegram' : '❌ ' + (d.error || '失敗');
+      statusEl.style.color = d.ok ? '#0f0' : '#f00';
+    }).catch(e => {
+      statusEl.textContent = '❌ 錯誤: ' + e;
+      statusEl.style.color = '#f00';
+    });
+}
+// Load telegram status on page load
+fetch('/api/telegram/status').then(r => r.json()).then(d => {
+  document.getElementById('tgEnabled').checked = d.enabled;
+  document.getElementById('tgFields').style.display = d.enabled ? 'block' : 'none';
+  if (d.enabled) refreshTgStatus();
+}).catch(() => {});
+
 let selectedCap = 100;
 function toggleSettings() {
   const p = document.getElementById('settingsPanel');
@@ -546,9 +859,9 @@ function applySettings() {
 }
 </script>
 
-<!-- 簡化帳戶資訊：左邊帳戶，右邊盈虧 -->
+<!-- 帳戶資訊：左邊帳戶+盈虧，右邊分型機器人 -->
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;background:linear-gradient(180deg,rgba(0,210,211,0.08),transparent);border-bottom:1px solid var(--border);">
-  <!-- 左邊：帳戶 -->
+  <!-- 左邊：帳戶 + 盈虧 -->
   <div style="padding:14px 20px;display:flex;flex-direction:column;gap:6px;">
     <div style="display:flex;justify-content:space-between;align-items:baseline;">
       <span style="font-size:11px;color:var(--dim);letter-spacing:1px;">💰 現金</span>
@@ -562,13 +875,30 @@ function applySettings() {
       <span style="font-size:11px;color:var(--dim);letter-spacing:1px;">📊 淨值</span>
       <span id="netValue" style="font-size:18px;font-weight:700;color:#aaa;font-family:'JetBrains Mono',monospace;">--</span>
     </div>
-  </div>
-  <!-- 右邊：總盈虧（合併） -->
-  <div style="padding:14px 20px;display:flex;flex-direction:column;gap:4px;border-left:2px solid var(--border);min-width:200px;">
-    <div style="display:flex;justify-content:flex-end;align-items:baseline;">
-      <span id="pnlLive" style="font-size:24px;font-weight:900;font-family:'JetBrains Mono',monospace;text-shadow:0 0 12px currentColor;">--</span>
+    <div style="display:flex;justify-content:space-between;align-items:baseline;border-top:1px solid var(--border);padding-top:6px;">
+      <span style="font-size:11px;color:var(--dim);letter-spacing:1px;">📈 盈虧</span>
+      <div style="text-align:right;">
+        <span id="pnlLive" style="font-size:20px;font-weight:900;font-family:'JetBrains Mono',monospace;text-shadow:0 0 12px currentColor;">--</span>
+        <span id="pnlPct" style="font-size:11px;color:var(--dim);font-family:'JetBrains Mono',monospace;margin-left:8px;">--</span>
+      </div>
     </div>
-    <div id="pnlPct" style="text-align:right;font-size:11px;color:var(--dim);font-family:'JetBrains Mono',monospace;">--</div>
+  </div>
+  <!-- 右邊：分型機器人 [模擬] 動態面板 -->
+  <div style="padding:14px 20px;display:flex;flex-direction:column;gap:6px;border-left:2px solid var(--border);">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-size:11px;color:#ff9f43;letter-spacing:1px;font-weight:700;cursor:pointer;" onclick="toggleFractalDetail()">🤖 分型機器人 [模擬] ▼</span>
+      <span id="fractalTopStatus" style="font-size:9px;color:#888;">--</span>
+    </div>
+    <!-- 緊湊狀態列 -->
+    <div id="fractalTopList" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:2px;font-size:8px;"></div>
+    <!-- 詳細活動面板（預設展開） -->
+    <div id="fractalDetail" style="display:block;margin-top:4px;">
+      <div id="fractalActivityLog" style="font-size:8px;color:#888;max-height:36px;overflow-y:auto;line-height:1.4;font-family:'JetBrains Mono',monospace;"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:baseline;border-top:1px solid var(--border);padding-top:6px;">
+      <span style="font-size:11px;color:var(--dim);letter-spacing:1px;">分型總盈虧</span>
+      <span id="fractalTotalPnl" style="font-size:18px;font-weight:900;font-family:'JetBrains Mono',monospace;">--</span>
+    </div>
   </div>
 </div>
 
@@ -834,6 +1164,23 @@ let brain3dData = null;
 let flyBrain3d = null;
 let state = null;
 let klines = [];
+// 動態價格格式：小數位數隨價格大小調整
+
+function qtyFmt(q) {
+  if (q == null || isNaN(q)) return '--';
+  if (q >= 1000) return q.toFixed(0);
+  if (q >= 100) return q.toFixed(2);
+  if (q >= 1) return q.toFixed(4);
+  return q.toFixed(6);
+}
+
+function priceFmt(p) {
+  if (p == null || isNaN(p)) return '0.00';
+  if (p < 0.01) return p.toFixed(8);
+  if (p < 1) return p.toFixed(4);
+  if (p < 100) return p.toFixed(3);
+  return p.toFixed(2);
+}
 let czscStructures = null;
 let events = [];
 let scene, camera, renderer, controls, points, labels = [];
@@ -1253,8 +1600,8 @@ function drawEyeChart() {
   const last = data[data.length - 1];
   ctx.fillStyle = '#4dd0e1';
   ctx.font = '11px "JetBrains Mono", monospace';
-  ctx.fillText(productSymbol + ' $' + last.c.toFixed(2), pad, 14);
-  document.getElementById('eyePrice').textContent = 'BID ' + last.c.toFixed(2) + '  ASK ' + (last.c * 1.0001).toFixed(2);
+  ctx.fillText(productSymbol + ' $' + priceFmt(last.c), pad, 14);
+  document.getElementById('eyePrice').textContent = 'BID ' + priceFmt(last.c) + '  ASK ' + priceFmt(last.c * 1.0001);
 }
 
 // ============ KLINE CANDLESTICK CHART ============
@@ -2282,7 +2629,7 @@ function updateTvChart(data, czscStructures, state) {
       const chg = displayData[displayData.length-1].c - displayData[0].o;
       const chgPct = (chg / displayData[0].o) * 100;
       const info = document.getElementById('klineInfo');
-      if (info) info.textContent = `${currentTimeframe.toUpperCase()} · 最近${displayHours}小時 ${displayData.length} 根 · 開 $${displayData[0].o.toFixed(2)} 高 $${max.toFixed(2)} 低 $${min.toFixed(2)} 收 $${lastC.toFixed(2)} · 變動 ${chg >= 0 ? '+' : ''}${chgPct.toFixed(2)}%`;
+      if (info) info.textContent = `${currentTimeframe.toUpperCase()} · 最近${displayHours}小時 ${displayData.length} 根 · 開 $${priceFmt(displayData[0].o)} 高 $${priceFmt(max)} 低 $${priceFmt(min)} 收 $${priceFmt(lastC)} · 變動 ${chg >= 0 ? '+' : ''}${chgPct.toFixed(2)}%`;
     }
   } catch(e) {
     console.error('[updateTvChart] FATAL', e);
@@ -2454,7 +2801,7 @@ function updateTradeMarkersBar() {
     const time = ev.wall_time ? new Date(ev.wall_time * 1000 + 8*3600*1000).toISOString().substr(11,8) : '';
     return '<span style="display:inline-flex;align-items:center;gap:3px;">' +
       '<span style="width:8px;height:8px;border-radius:50%;background:' + color + ';border:1px solid #fff;"></span>' +
-      side + ' $' + price.toFixed(2) + ' ' + time + '</span>';
+      side + ' $' + priceFmt(price) + ' ' + time + '</span>';
   }).join('');
 }
 
@@ -2496,7 +2843,7 @@ async function fetchTokenInfo() {
       const liq = data.liquidity || 0;
       const chgColor = chg24h >= 0 ? 'var(--green)' : 'var(--red)';
       document.getElementById('tokenInfo').innerHTML =
-        `$${data.price.toFixed(2)} · <span style="color:${chgColor}">24h ${chg24h >= 0 ? '+' : ''}${chg24h.toFixed(2)}%</span> · Vol $${(vol24h/1e6).toFixed(1)}M`;
+        `$${priceFmt(data.price)} · <span style="color:${chgColor}">24h ${chg24h >= 0 ? '+' : ''}${chg24h.toFixed(2)}%</span> · Vol $${(vol24h/1e6).toFixed(1)}M`;
       if (state) {
         const meta = state.meta || {};
         const equity = parseFloat(state.latest ? state.latest.equity_usdc : 0) || 0;
@@ -2544,9 +2891,10 @@ function updatePnL(meta, simEquity, initial) {
   const nbState = (state && state.latest && state.latest.no_brain) ? state.latest.no_brain : ((state && state.no_brain_state) ? state.no_brain_state : {});
   const nbPos = parseFloat(nbState.position || 0);
   const nbUnrealized = parseFloat(nbState.unrealized_pnl || 0);
+  const nbRealized = parseFloat(nbState.realized_pnl || 0);
 
-  // 單一資金池：P&L = equity - initial
-  const totalPnl = flyEquity - initial;
+  // 單一資金池：P&L = 果蠅equity - initial + 無腦盈虧
+  const totalPnl = (flyEquity - initial) + nbRealized + nbUnrealized;
   const unrealized = nbUnrealized;
   const roi = initial > 0 ? (totalPnl / initial * 100) : 0;
 
@@ -2593,9 +2941,8 @@ function updatePnL(meta, simEquity, initial) {
     pnlBox.classList.add(totalPnl >= 0 ? 'pnl-profit' : 'pnl-loss');
   }
 
-  // 計算果蠅和無腦的總盈虧
+  // 果蠅和無腦的總盈虧（nbRealized已在上方宣告）
   const flyTotalPnl = totalPnl;  // 果蠅：equity - initial
-  const nbRealized = parseFloat(nbState.realized_pnl || 0);
   const nbTotalPnl = nbRealized + nbUnrealized;  // 無腦：已實現+未實現
 
   // 果蠅盈虧（已實現+未實現）
@@ -2897,7 +3244,7 @@ function renderCombinedTrades(state) {
   if (!log) return;
   const events = state.events || [];
   const nbState = (state.latest && state.latest.no_brain) || (state.no_brain_state) || {};
-  const nbTrades = nbState.recent_trades || state.no_brain_trades || [];
+  const nbTrades = state.no_brain_trades || nbState.recent_trades || [];
   const combined = [];
   events.forEach(e => {
     if (e.execution && e.execution.status === 'FILLED') {
@@ -2937,7 +3284,10 @@ function renderCombinedTrades(state) {
       qty: parseFloat(t.qty || 0),
       pnl: parseFloat(t.pnl || 0),
       reason: t.signal || '',
-      source: '無腦'
+      source: '無腦',
+      rsi: t.rsi != null ? parseFloat(t.rsi) : null,
+      trend: t.trend || '',
+      signal_index: t.signal_index != null ? parseInt(t.signal_index) : -1
     });
   });
   // Calculate realized P&L for fly trades by matching buys and sells
@@ -2963,7 +3313,7 @@ function renderCombinedTrades(state) {
     return;
   }
   document.getElementById('eventCount').textContent = combined.length + ' 筆成交';
-  const header = `<div style="display:grid;grid-template-columns:50px 70px 50px 80px 80px 70px 70px 1fr;gap:8px;padding:6px 12px;background:var(--panel2);border-bottom:1px solid var(--border);color:var(--dim);font-size:10px;font-weight:700;position:sticky;top:0;z-index:1;">
+  const header = `<div style="display:grid;grid-template-columns:40px 60px 40px 70px 70px 60px 60px 1fr;gap:6px;padding:6px 12px;background:var(--panel2);border-bottom:1px solid var(--border);color:var(--dim);font-size:10px;font-weight:700;position:sticky;top:0;z-index:1;">
     <span>編號</span><span>時間</span><span>方向</span><span>價格</span><span>金額</span><span>顆數</span><span>盈虧</span><span>理由</span>
   </div>`;
   log.innerHTML = header + combined.slice(0, 100).map((t, i) => {
@@ -2972,15 +3322,15 @@ function renderCombinedTrades(state) {
     const isBuy = t.side === 'BUY';
     const pnlColor = t.pnl > 0 ? 'var(--green)' : (t.pnl < 0 ? 'var(--red)' : 'var(--dim)');
     const srcColor = t.source === '果蠅' ? '#00d2d3' : '#ff9f43';
-    return `<div style="display:grid;grid-template-columns:50px 70px 50px 80px 80px 70px 70px 1fr;gap:8px;padding:6px 12px;border-bottom:1px solid var(--border);align-items:center;font-size:12px;">
+    return `<div style="display:grid;grid-template-columns:40px 60px 40px 70px 70px 60px 60px 1fr;gap:6px;padding:6px 12px;border-bottom:1px solid var(--border);align-items:center;font-size:12px;">
       <span style="color:var(--dim);">#${combined.length - i}</span>
       <span style="color:var(--dim);">${ts}</span>
       <span style="color:${isBuy?'#2ed573':'#ff4757'};font-weight:700;">${t.side}</span>
-      <span style="font-family:monospace;">$${t.price.toFixed(2)}</span>
+      <span style="font-family:monospace;">$${priceFmt(t.price)}</span>
       <span style="font-family:monospace;">$${t.amount.toFixed(2)}</span>
-      <span style="font-family:monospace;color:var(--text);">${t.qty.toFixed(4)}</span>
-      <span style="color:${pnlColor};font-weight:700;">${t.pnl!==0?(t.pnl>0?'+':'')+t.pnl.toFixed(2):'--'}</span>
-      <span style="color:${srcColor};font-size:11px;">[${t.source}] ${(t.reason||'').slice(0,50)}</span>
+      <span style="font-family:monospace;color:var(--text);">${qtyFmt(t.qty)}</span>
+      <span style="color:${pnlColor};font-weight:700;white-space:nowrap;">${t.pnl!==0?(t.pnl>0?'+':'')+t.pnl.toFixed(2):'--'}</span>
+      <span style="color:${srcColor};font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${t.source === '無腦' ? formatNbSignalTags(t, t.reason) : formatFlySignalTags(t, t.reason)}</span>
     </div>`;
   }).join('');
 }
@@ -3023,6 +3373,71 @@ function updatePnlSummary(tab) {
   }
 }
 
+function formatNbSignalTags(t, signal) {
+  const rsi = t.rsi != null ? t.rsi : '--';
+  const trend = t.trend || '--';
+  const idx = t.signal_index != null && t.signal_index >= 0 ? '#' + t.signal_index : '';
+  const price = t.price ? '$' + priceFmt(parseFloat(t.price)) : '';
+  const side = t.side || '';
+  const isBuy = side === 'BUY';
+  const trendLabel = trend === 'uptrend' ? '多頭' : trend === 'downtrend' ? '空頭' : '震盪';
+  const rsiColor = rsi > 70 ? '#ff6b6b' : rsi < 30 ? '#51cf66' : '#ffd43b';
+  const tags = [];
+  tags.push('<span style="display:inline-block;padding:1px 6px;border-radius:4px;background:' + (isBuy ? 'rgba(0,255,136,0.15)' : 'rgba(255,49,49,0.15)') + ';color:' + (isBuy ? '#00ff88' : '#ff3131') + ';font-weight:700;margin-right:4px;">' + (isBuy ? '🟢買' : '🔴賣') + idx + '</span>');
+  tags.push('<span style="display:inline-block;padding:1px 6px;border-radius:4px;background:rgba(255,212,59,0.1);color:' + rsiColor + ';margin-right:4px;">📉RSI' + (typeof rsi === 'number' ? rsi.toFixed(0) : rsi) + '</span>');
+  tags.push('<span style="display:inline-block;padding:1px 6px;border-radius:4px;background:rgba(0,210,211,0.1);color:#00d2d3;margin-right:4px;">📊' + trendLabel + '</span>');
+  if (price) tags.push('<span style="display:inline-block;padding:1px 6px;border-radius:4px;background:rgba(255,255,255,0.05);color:#aaa;margin-right:4px;">🏷️' + price + '</span>');
+  return tags.join('');
+}
+
+function formatFlySignalTags(t, reason) {
+  const tags = [];
+  const isBuy = t.side === 'BUY';
+  tags.push('<span style="display:inline-block;padding:1px 6px;border-radius:4px;background:' + (isBuy ? 'rgba(0,255,136,0.15)' : 'rgba(255,49,49,0.15)') + ';color:' + (isBuy ? '#00ff88' : '#ff3131') + ';font-weight:700;margin-right:4px;">' + (isBuy ? '🟢買' : '🔴賣') + '</span>');
+
+  // Parse gate number from reason
+  const gateMatch = (reason || '').match(/閘門(\d+)/);
+  if (gateMatch) tags.push('<span style="display:inline-block;padding:1px 6px;border-radius:4px;background:rgba(186,85,211,0.15);color:#ba55d3;margin-right:4px;">🧠閘門' + gateMatch[1] + '</span>');
+
+  // Parse Hz difference
+  const hzMatch = (reason || '').match(/右左差([\d.]+)Hz|左右差([\d.]+)Hz/);
+  if (hzMatch) tags.push('<span style="display:inline-block;padding:1px 6px;border-radius:4px;background:rgba(255,165,0,0.1);color:#ffa500;margin-right:4px;">⚡' + (hzMatch[1] || hzMatch[2]) + 'Hz</span>');
+
+  // Parse RSI
+  const rsiMatch = (reason || '').match(/RSI(\d+)/);
+  if (rsiMatch) {
+    const rsi = parseInt(rsiMatch[1]);
+    const rsiColor = rsi > 70 ? '#ff6b6b' : rsi < 30 ? '#51cf66' : '#ffd43b';
+    tags.push('<span style="display:inline-block;padding:1px 6px;border-radius:4px;background:rgba(255,212,59,0.1);color:' + rsiColor + ';margin-right:4px;">📉RSI' + rsi + '</span>');
+  }
+
+  // Parse visual trigger
+  if ((reason || '').includes('視覺觸頂') || (reason || '').includes('觸頂')) {
+    const pctMatch = (reason || '').match(/百分位(\d+)%/);
+    tags.push('<span style="display:inline-block;padding:1px 6px;border-radius:4px;background:rgba(0,210,211,0.1);color:#00d2d3;margin-right:4px;">👁️觸頂' + (pctMatch ? pctMatch[1] + '%' : '') + '</span>');
+  }
+  if ((reason || '').includes('視覺觸底') || (reason || '').includes('觸底')) {
+    tags.push('<span style="display:inline-block;padding:1px 6px;border-radius:4px;background:rgba(0,210,211,0.1);color:#00d2d3;margin-right:4px;">👁️觸底</span>');
+  }
+
+  // Parse chanlun confirmation
+  if ((reason || '').includes('纏論') || (reason || '').includes('禪論')) {
+    tags.push('<span style="display:inline-block;padding:1px 6px;border-radius:4px;background:rgba(255,105,180,0.1);color:#ff69b4;margin-right:4px;">📊纏論</span>');
+  }
+
+  // Parse learning
+  if ((reason || '').includes('學習') || (reason || '').includes('知識')) {
+    tags.push('<span style="display:inline-block;padding:1px 6px;border-radius:4px;background:rgba(50,205,50,0.1);color:#32cd32;margin-right:4px;">🎓學習</span>');
+  }
+
+  // Price tag
+  if (t.price && t.price > 0) {
+    tags.push('<span style="display:inline-block;padding:1px 6px;border-radius:4px;background:rgba(255,255,255,0.05);color:#aaa;margin-right:4px;">🏷️$' + priceFmt(t.price) + '</span>');
+  }
+
+  return tags.join('');
+}
+
 function renderNoBrainTrades(trades) {
   const log = document.getElementById('eventLog');
   if (!log) return;
@@ -3037,7 +3452,7 @@ function renderNoBrainTrades(trades) {
     const num = trades.length - idx;
     const time = toUTC8(t.time);
     const side = t.side || '--';
-    const price = t.price ? '$' + parseFloat(t.price).toFixed(2) : '--';
+    const price = t.price ? '$' + priceFmt(parseFloat(t.price)) : '--';
     const amount = t.amount ? '$' + parseFloat(t.amount).toFixed(2) : '--';
     const qty = t.qty ? parseFloat(t.qty).toFixed(6) : '--';
     const signal = t.signal || '';
@@ -3062,7 +3477,7 @@ function renderNoBrainTrades(trades) {
       <span style="color:var(--text)">${amount}<br><span style="font-size:10px;color:var(--dim)">${qty}</span></span>
       <span style="color:${pnlColor};white-space:nowrap;text-align:right;">${pnlText}</span>
       <span style="color:${pnlPctColor};font-weight:600;white-space:nowrap;text-align:right;">${pnlPctText}</span>
-      <span style="color:var(--cyan);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left;" title="${signal}">${signal}</span>
+      <span style="color:var(--text);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left;" title="${signal}">${formatNbSignalTags(t, signal)}</span>
     </div>`;
   }).join('');
   const header = `<div style="display:grid;grid-template-columns:${gridCols};gap:4px;padding:6px 8px;border-bottom:2px solid var(--accent);font-weight:700;color:var(--accent);position:sticky;top:0;background:var(--bg);z-index:1;">
@@ -3584,16 +3999,16 @@ function renderDepth() {
   const spread = bestAsk - bestBid;
   const spreadPct = midPrice ? (spread / midPrice * 100) : 0;
 
-  document.getElementById('depthPrice').textContent = '$' + midPrice.toFixed(2);
+  document.getElementById('depthPrice').textContent = '$' + priceFmt(midPrice);
   document.getElementById('depthSpread').textContent =
-    '價差 $' + spread.toFixed(2) + ' (' + spreadPct.toFixed(3) + '%) · 買一 $' + bestBid.toFixed(2) + ' / 賣一 $' + bestAsk.toFixed(2);
+    '價差 $' + priceFmt(spread) + ' (' + spreadPct.toFixed(3) + '%) · 買一 $' + priceFmt(bestBid) + ' / 賣一 $' + priceFmt(bestAsk);
 
   // Asks (red, top)
   asksEl.innerHTML = asks.map(a => {
     const pct = (a[1] / maxQty * 100).toFixed(0);
     return '<div class="depth-row depth-ask">' +
       '<div class="depth-bar" style="width:' + pct + '%;"></div>' +
-      '<span class="depth-price">' + a[0].toFixed(2) + '</span>' +
+      '<span class="depth-price">' + priceFmt(a[0]) + '</span>' +
       '<span class="depth-qty">' + a[1].toFixed(4) + ' ' + productSymbol + '</span></div>';
   }).join('');
 
@@ -3602,7 +4017,7 @@ function renderDepth() {
     const pct = (b[1] / maxQty * 100).toFixed(0);
     return '<div class="depth-row depth-bid">' +
       '<div class="depth-bar" style="width:' + pct + '%;"></div>' +
-      '<span class="depth-price">' + b[0].toFixed(2) + '</span>' +
+      '<span class="depth-price">' + priceFmt(b[0]) + '</span>' +
       '<span class="depth-qty">' + b[1].toFixed(4) + ' ' + productSymbol + '</span></div>';
   }).join('');
 

@@ -6,13 +6,15 @@ import json
 import time
 from pathlib import Path
 from decimal import Decimal as D
+from .telegram_notify import notify_trade
 
 
 class ChanNoBrainTrader:
     """基於纏論買賣信號的無腦交易器，使用獨立帳戶不影響果蠅交易"""
 
-    def __init__(self, state_path: Path, initial_cash: float = 100.0):
+    def __init__(self, state_path: Path, initial_cash: float = 100.0, product: str = "BTC-USDT"):
         self.state_path = Path(state_path)
+        self.product = product
         self.initial_cash = initial_cash
         self.cash = initial_cash
         self.cash_provider = None
@@ -209,6 +211,8 @@ class ChanNoBrainTrader:
                     "signal_index": findex, "pnl": 0, "rsi": round(rsi, 1), "trend": trend,
                 })
                 self.save()
+                notify_trade("BUY", current_price, buy_amount, qty,
+                           "確認底分型買入", "無腦", self.product, 0, rsi)
                 return {"action": "BUY", "price": current_price, "qty": qty,
                         "signal": f"底分型買入 RSI{rsi:.0f} {trend}"}
 
@@ -260,6 +264,7 @@ class ChanNoBrainTrader:
             "qty": qty, "amount": sell_amount, "signal": signal,
             "signal_index": -1, "pnl": pnl, "rsi": round(rsi, 1), "trend": trend,
         })
+        notify_trade("SELL", price, sell_amount, qty, signal, "無腦", self.product, pnl, rsi)
         # 部分賣出後均價不變
         self.save()
 
@@ -281,6 +286,7 @@ class ChanNoBrainTrader:
             "signal_index": findex, "pnl": pnl, "rsi": round(rsi, 1), "trend": trend,
         })
         self.save()
+        notify_trade("SELL", price, sell_amount, sell_qty, signal, "無腦", self.product, pnl, rsi)
 
     def get_status(self, current_price: float = 0):
         unrealized = (current_price - self.avg_entry) * self.position if self.position > 0 and current_price > 0 else 0
