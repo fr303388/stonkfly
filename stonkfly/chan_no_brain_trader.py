@@ -191,12 +191,14 @@ class ChanNoBrainTrader:
                 return {"action": "WAIT", "reason": f"下跌趨勢 百分位{percentile:.0f}% 過高"}
 
             avail = float(self.cash_provider()) if self.cash_provider else float(self.cash)
-            buy_amount = avail
+            # 每次只用20%資金，避免all-in
+            buy_amount = avail * 0.20
             if buy_amount > 10 and current_price > 0:
                 qty = buy_amount / current_price
                 self.position = qty
                 self.avg_entry = current_price
                 self.highest_since_entry = current_price
+                self._half_sold = False  # 新買入重置減倉標記
                 self.cash = float(self.cash) - buy_amount
                 self.last_signal_time = now
                 self.last_buy_signal_index = findex
@@ -209,6 +211,16 @@ class ChanNoBrainTrader:
                 self.save()
                 return {"action": "BUY", "price": current_price, "qty": qty,
                         "signal": f"底分型買入 RSI{rsi:.0f} {trend}"}
+
+        # ===== 預測性賣出：RSI超買(>70)先賣一半 =====
+        if self.position > 0 and rsi > 70 and not getattr(self, '_half_sold', False):
+            unrealized = (current_price - self.avg_entry) * self.position
+            if unrealized > 0:  # 有獲利才減倉
+                half_qty = self.position * 0.5
+                self._partial_sell(current_price, half_qty, "RSI超買70減倉一半", rsi, trend)
+                self._half_sold = True
+                return {"action": "SELL_PARTIAL", "price": current_price, "qty": half_qty,
+                        "signal": f"RSI{rsi:.0f}超買 先賣一半 盈虧{unrealized:+.2f}"}
 
         # ===== 賣出：最近頂分型 + RSI過濾 + 有最小利潤 =====
         if self.position > 0 and latest_top is not None:
@@ -237,6 +249,20 @@ class ChanNoBrainTrader:
             return {"action": "HOLD", "reason": f"持有 RSI{rsi:.0f} 高點{self.highest_since_entry:.2f}"}
         return {"action": "WAIT", "reason": f"等待底分型 RSI{rsi:.0f} {trend}"}
 
+    def _partial_sell(self, price, qty, signal, rsi, trend):
+        """部分賣出"""
+        sell_amount = qty * price
+        pnl = (price - self.avg_entry) * qty
+        self.position -= qty
+        self.cash += sell_amount
+        self.trades.append({
+            "time": time.time(), "side": "SELL", "price": price,
+            "qty": qty, "amount": sell_amount, "signal": signal,
+            "signal_index": -1, "pnl": pnl, "rsi": round(rsi, 1), "trend": trend,
+        })
+        # 部分賣出後均價不變
+        self.save()
+
     def _sell(self, price, signal, rsi, trend, findex):
         sell_qty = self.position
         sell_amount = sell_qty * price
@@ -245,6 +271,7 @@ class ChanNoBrainTrader:
         self.position = 0
         self.avg_entry = 0.0
         self.highest_since_entry = 0.0
+        self._half_sold = False
         self.stop_loss_price = 0.0
         self.last_signal_time = time.time()
         self.last_sell_signal_index = findex

@@ -2541,7 +2541,7 @@ function updatePnL(meta, simEquity, initial) {
 
   // 果蠅：直接用後端 equity_usdc（共用池）
   const flyEquity = parseFloat(state.latest?.equity_usdc || simEquity || cash);
-  const nbState = (state && state.no_brain_state) ? state.no_brain_state : {};
+  const nbState = (state && state.latest && state.latest.no_brain) ? state.latest.no_brain : ((state && state.no_brain_state) ? state.no_brain_state : {});
   const nbPos = parseFloat(nbState.position || 0);
   const nbUnrealized = parseFloat(nbState.unrealized_pnl || 0);
 
