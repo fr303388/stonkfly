@@ -116,16 +116,17 @@ class ChanNoBrainTrader:
 
     def process_signal(self, czsc_data: dict, current_price: float):
         now = time.time()
+        current_price = float(current_price) if current_price else 0.0
         self.tick_count += 1
         self.save()
 
         if self.tick_count <= self.startup_protection_ticks:
             return {"action": "STARTUP_PROTECT", "reason": f"觀察中({self.tick_count}/{self.startup_protection_ticks})"}
 
-        klines = czsc_data.get("klines", [])
-        rsi = self._calc_rsi(klines)
-        trend = self._calc_trend(klines)
-        percentile = self._calc_percentile(klines)
+        klines = czsc_data.get("klines", []) or []
+        rsi = float(self._calc_rsi(klines))
+        trend = str(self._calc_trend(klines))
+        percentile = float(self._calc_percentile(klines))
 
         # ===== 持倉管理 =====
         if self.position > 0:
@@ -189,14 +190,14 @@ class ChanNoBrainTrader:
             if trend == "downtrend" and percentile > 50:
                 return {"action": "WAIT", "reason": f"下跌趨勢 百分位{percentile:.0f}% 過高"}
 
-            avail = self.cash_provider() if self.cash_provider else self.cash
-            buy_amount = min(avail, avail)
+            avail = float(self.cash_provider()) if self.cash_provider else float(self.cash)
+            buy_amount = avail
             if buy_amount > 10 and current_price > 0:
                 qty = buy_amount / current_price
                 self.position = qty
                 self.avg_entry = current_price
                 self.highest_since_entry = current_price
-                self.cash -= buy_amount
+                self.cash = float(self.cash) - buy_amount
                 self.last_signal_time = now
                 self.last_buy_signal_index = findex
                 self.stop_loss_price = current_price * (1 - self.stop_loss_pct)
