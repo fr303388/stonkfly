@@ -355,6 +355,7 @@ def main():
         COOLDOWN_SECONDS = 40
         # 全局持久化神經模擬 executor（不使用 with，避免 shutdown 阻塞）
         _neural_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="neural-sim")
+        add_count = 0  # 加倉次數計數（跨迭代持久）
         while not a.steps or count < a.steps:
             started = time.monotonic()
             # Release unused memory before each tick - prevents gradual slowdown
@@ -831,7 +832,6 @@ def main():
                     new_qty = pos_qty - exec_qty
                     if new_qty <= 0.0001:
                         avg_entry_price = 0.0
-            add_count = 0  # 加倉次數計數
             # Add TP levels and avg entry to neural for UI display
             _tp_disp_pct = 0.03 if _is_downtrend else 0.015
             neural["tp1"] = round(avg_entry_price * (1 + _tp_disp_pct*0.33), 2) if avg_entry_price > 0 else None

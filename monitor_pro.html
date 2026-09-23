@@ -2593,6 +2593,11 @@ function updatePnL(meta, simEquity, initial) {
     pnlBox.classList.add(totalPnl >= 0 ? 'pnl-profit' : 'pnl-loss');
   }
 
+  // 計算果蠅和無腦的總盈虧
+  const flyTotalPnl = totalPnl;  // 果蠅：equity - initial
+  const nbRealized = parseFloat(nbState.realized_pnl || 0);
+  const nbTotalPnl = nbRealized + nbUnrealized;  // 無腦：已實現+未實現
+
   // 果蠅盈虧（已實現+未實現）
   const flyPnlEl = document.getElementById('flyPnlLive');
   if (flyPnlEl) {
@@ -2999,18 +3004,22 @@ function updatePnlSummary(tab) {
   const flyInit = parseFloat(meta.initial_cash || 100);
   const flyTotal = flyEquity - flyInit;
 
-  // === 無腦：共用池，不單獨計算 ===
-  const nbState = (state && state.no_brain_state) ? state.no_brain_state : {};
+  // === 無腦：從正確路徑讀取 ===
+  const nbState = (state && state.latest && state.latest.no_brain) ? state.latest.no_brain : ((state && state.no_brain_state) ? state.no_brain_state : {});
   const nbBtc = parseFloat(nbState.position || 0);
+  const nbRealized = parseFloat(nbState.realized_pnl || 0);
+  const nbUnrealized = parseFloat(nbState.unrealized_pnl || 0);
+  const nbTotal = nbRealized + nbUnrealized;
 
-  // === 顯示：單一資金池 ===
+  // === 顯示：單一資金池，盈虧=果蠅+無腦 ===
+  const combinedTotal = flyTotal + nbTotal;
   const flyCashEl = document.getElementById('pnlFlyCash');
   if (flyCashEl) flyCashEl.textContent = '$' + flyCash.toLocaleString('en-US', {maximumFractionDigits: 2});
   posEl.textContent = (flyBtc + nbBtc).toFixed(4) + ' ' + productSymbol;
-  // 合計盈虧 = equity - initial
+  // 合計盈虧 = 果蠅盈虧 + 無腦盈虧
   if (totalEl) {
-    totalEl.textContent = (flyTotal >= 0 ? '+' : '') + '$' + flyTotal.toFixed(2);
-    totalEl.style.color = flyTotal >= 0 ? '#39ff14' : '#ff3131';
+    totalEl.textContent = (combinedTotal >= 0 ? '+' : '') + '$' + combinedTotal.toFixed(2);
+    totalEl.style.color = combinedTotal >= 0 ? '#39ff14' : '#ff3131';
   }
 }
 
