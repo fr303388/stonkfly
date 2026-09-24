@@ -25,7 +25,7 @@ def up(value, step):
 @dataclass(frozen=True)
 class Settings:
     products: tuple[str, ...] = ("BTC-USDC",)
-    capital: str = "50"
+    capital: str = "5000"
     order_limit: str = "50"
     loss_stop: str = "500000"
     fee_reserve: str = "0.02"

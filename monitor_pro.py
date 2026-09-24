@@ -79,7 +79,7 @@ def api_switch():
     import subprocess, json, os
     data = request.get_json(force=True)
     pair = data.get("pair", "BTC-USDT")
-    capital = str(int(data.get("capital", 100)) // 2)
+    capital = str(int(data.get("capital", 100)))  # 共用現金，不需除以2
     live = data.get("live", False)
     api_key = data.get("api_key", "")
     api_secret = data.get("api_secret", "")
