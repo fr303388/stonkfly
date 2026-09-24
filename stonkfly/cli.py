@@ -1,4 +1,4 @@
-"""Single-worker run loop. Default execution is paper; live must be explicit."""
+﻿"""Single-worker run loop. Default execution is paper; live must be explicit."""
 
 import argparse
 import dataclasses
@@ -15,6 +15,7 @@ import numpy as np
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 
 from .config import D, Settings
+from .telegram_notify import notify_trade as _telegram_notify_trade
 
 
 def _acquire_worker_lock(path):
@@ -114,12 +115,12 @@ def main():
         "--products",
         nargs="+",
         default=["BTC-USDC"],
-        choices=["BTC-USDT", "ETH-USDT", "BNB-USDT", "SOL-USDT", "ZEC-USDT", "ADA-USDT", "AVAX-USDT", "DOT-USDT", "LINK-USDT", "LTC-USDT", "NEAR-USDT", "ATOM-USDT", "ARB-USDT", "OP-USDT", "INJ-USDT", "SUI-USDT", "SEI-USDT", "DOGE-USDT", "SHIB-USDT", "PEPE-USDT", "WIF-USDT", "FLOKI-USDT", "BONK-USDT", "WLD-USDT", "BCH-USDT", "PENGU-USDT"],
+        choices=["BTC-USDT", "ETH-USDT", "BNB-USDT", "SOL-USDT", "ZEC-USDT", "ADA-USDT", "AVAX-USDT", "DOT-USDT", "LINK-USDT", "LTC-USDT", "NEAR-USDT", "ATOM-USDT", "ARB-USDT", "OP-USDT", "INJ-USDT", "SUI-USDT", "SEI-USDT", "DOGE-USDT", "SHIB-USDT", "PEPE-USDT", "WIF-USDT", "FLOKI-USDT", "BONK-USDT", "WLD-USDT", "BCH-USDT", "PENGU-USDT", "ASTER-USDT"],
     )
     run.add_argument("--neural-ms", type=float, default=500)
     run.add_argument("--hz432", action="store_true", help="Enable 432Hz oscillatory stimulation to KC mushroom body neurons")
     run.add_argument("--hz432-current", type=float, default=5.0, help="432Hz stimulation current amplitude (default 5.0)")
-    run.add_argument("--strategy", choices=["BTC-USDT", "ETH-USDT", "BNB-USDT", "SOL-USDT", "ZEC-USDT", "ADA-USDT", "AVAX-USDT", "DOT-USDT", "LINK-USDT", "LTC-USDT", "NEAR-USDT", "ATOM-USDT", "ARB-USDT", "OP-USDT", "INJ-USDT", "SUI-USDT", "SEI-USDT", "DOGE-USDT", "SHIB-USDT", "PEPE-USDT", "WIF-USDT", "FLOKI-USDT", "BONK-USDT", "WLD-USDT", "BCH-USDT", "PENGU-USDT"], default="none",
+    run.add_argument("--strategy", choices=["BTC-USDT", "ETH-USDT", "BNB-USDT", "SOL-USDT", "ZEC-USDT", "ADA-USDT", "AVAX-USDT", "DOT-USDT", "LINK-USDT", "LTC-USDT", "NEAR-USDT", "ATOM-USDT", "ARB-USDT", "OP-USDT", "INJ-USDT", "SUI-USDT", "SEI-USDT", "DOGE-USDT", "SHIB-USDT", "PEPE-USDT", "WIF-USDT", "FLOKI-USDT", "BONK-USDT", "WLD-USDT", "BCH-USDT", "PENGU-USDT", "ASTER-USDT"], default="none",
                      help="Position sizing strategy: none (fixed), martingale (double after loss), anti_martingale (double after win), kelly")
     run.add_argument(
         "--take-profit",
@@ -351,7 +352,7 @@ def main():
         last_trade_time = 0.0
         last_trade_side = None  # 記錄上次交易類型，用於區分買賣冷卻時間
         last_buy_time = 0.0
-        MIN_HOLD_SECONDS = 180
+        MIN_HOLD_SECONDS = 900  # 最低持倉15分鐘，避免短打
         COOLDOWN_SECONDS = 40
         # 全局持久化神經模擬 executor（不使用 with，避免 shutdown 阻塞）
         _neural_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="neural-sim")
@@ -565,7 +566,7 @@ def main():
             # [果蠅參考纏論指標自主決策] 果蠅參考纏論數據後自己判斷買賣
             # 全局冷卻：賣出後15分鐘內不再買入（避免追高），買入後5分鐘內不再交易
             if last_trade_side == "SELL":
-                _global_cooldown = 300  # 賣出後5分鐘冷卻（避免追高但不錯過機會）
+                _global_cooldown = 900  # 賣出後15分鐘冷卻（避免追高）
             else:
                 _global_cooldown = 0  # 買入後不全局冷卻（加倉由_add_cooldown控制）
             _time_since_trade = time.time() - last_trade_time if last_trade_time > 0 else 9999
@@ -618,9 +619,9 @@ def main():
 
                 # 果蠅參考纏論建議再下單：不能自己無腦下單
                 # 基礎買入：雙方共識 或 纏論主導(果蠅不反對)
-                want_buy = (fly_natural_side == "BUY" and chan_sig == "BUY") or (chan_sig == "BUY" and fly_natural_side == "HOLD")
+                want_buy = (fly_natural_side == "BUY" and chan_sig == "BUY") or (chan_sig == "BUY" and fly_natural_side == "HOLD" and chan_conf > 70)
                 # 基礎賣出：雙方共識 或 纏論主導(果蠅不反對)
-                want_sell = (fly_natural_side == "SELL" and chan_sig == "SELL") or (chan_sig == "SELL" and fly_natural_side == "HOLD")
+                want_sell = (fly_natural_side == "SELL" and chan_sig == "SELL") or (chan_sig == "SELL" and fly_natural_side == "HOLD" and chan_conf > 70)
 
                 # 學習加成：實戰學習器高信心買入(>60)且果蠅不反對 → 也可買入
                 if _prac_sig == "BUY" and _prac_conf > 60 and fly_natural_side != "SELL" and not has_position:
@@ -651,7 +652,7 @@ def main():
                     _pnl_pct = (current_price - avg_entry_price) / avg_entry_price * 100
                     neural["decision_note"] = f"[TP3止盈] 均價${avg_entry_price:.2f} 現價${current_price:.2f} 達到TP3(${_tp3_price:.2f})，全數出清，盈虧{_pnl_pct:+.3f}%"
                 # 纏論賣出模式：有持倉時，纏論指示SELL就全數出清
-                elif has_position and chan_sig == "SELL":
+                elif has_position and chan_sig == "SELL" and (time.time() - last_buy_time >= MIN_HOLD_SECONDS or take_profit_hit):
                     # 纏論指示賣出，全數出清
                     neural["side"] = "SELL"
                     neural["fly_side"] = fly_natural_side
@@ -673,9 +674,9 @@ def main():
                     neural["side"] = "HOLD"
                     neural["fly_side"] = fly_natural_side
                     neural["chan_side"] = chan_sig
-                    _current_pct = (current_price - avg_entry_price) / avg_entry_price * 100 if avg_entry_price > 0 else 0
+                    _current_pct = (current_price - avg_entry_price) / avg_entry_price * 100 if avg_entry_price > 0 else 0; _hold_left = max(0, int(MIN_HOLD_SECONDS - (time.time() - last_buy_time)))
                     _learn_note = f" 知識{_overall_knowledge:.0f}% 實戰:{_prac_sig}({_prac_conf:.0f}%)" if _prac_sig != "HOLD" else f" 知識{_overall_knowledge:.0f}%"
-                    neural["decision_note"] = f"[持有中] 均價${avg_entry_price:.2f} 現價${current_price:.2f} ({_current_pct:+.3f}%) | 等待賣出訊號 | 果蠅:{fly_natural_side} 纏論:{chan_sig}{_learn_note}"
+                    neural["decision_note"] = f"[持有中] 最低持倉剩${_hold_left}s 均價${avg_entry_price:.2f} 現價${current_price:.2f} ({_current_pct:+.3f}%) | 等待賣出訊號 | 果蠅:{fly_natural_side} 纏論:{chan_sig}{_learn_note}"
                 elif want_buy and not _in_cooldown:
                     # 無持倉，正常買入
                     if _prac_sig == "BUY" and _prac_conf > 60 and chan_sig != "BUY":
@@ -822,6 +823,24 @@ def main():
                         chan_strategy.update_position(None)
                 exec_qty = float(order.get("base", 0))
                 exec_price = float(order.get("quote", 0)) / exec_qty if exec_qty > 0 else current_price
+                # 發送 Telegram 交易通知
+                try:
+                    _notify_amount = float(order.get("quote", 0))
+                    _notify_reason = neural.get("decision_note", "神經決策")[:80]
+                    _notify_pnl = float(delta) if exec_side == "SELL" else None
+                    _telegram_notify_trade(
+                        side=exec_side,
+                        price=exec_price,
+                        amount=_notify_amount,
+                        qty=exec_qty,
+                        reason=_notify_reason,
+                        source="果蠅",
+                        product=product,
+                        pnl=_notify_pnl,
+                        rsi=rsi_val,
+                    )
+                except Exception as _e:
+                    print(f"[Telegram] notify failed: {_e}", flush=True)
                 if exec_side == "BUY" and exec_qty > 0:
                     if avg_entry_price == 0 or pos_qty == 0:
                         avg_entry_price = exec_price

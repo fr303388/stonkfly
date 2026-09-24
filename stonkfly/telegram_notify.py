@@ -50,7 +50,7 @@ def fmt_price(price: float) -> str:
     elif price >= 1:
         return f"${price:,.4f}"
     else:
-        return f"${price:,.6f}"
+        return f"${price:,.8f}"
 
 
 def send_telegram(message: str) -> bool:

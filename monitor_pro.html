@@ -129,6 +129,20 @@
   }
   .flow-card { cursor: pointer; transition: all 0.2s; position: relative; overflow: visible; }
   .flow-card:hover { border-color: var(--cyan); transform: translateY(-1px); }
+  @keyframes fractalFlash {
+    0%, 100% { border-color: #ffd700; box-shadow: 0 0 4px rgba(255,215,0,0.4); }
+    50% { border-color: #ff9f43; box-shadow: 0 0 10px rgba(255,215,0,0.8); }
+  }
+  .fractal-card-active {
+    animation: fractalFlash 1.2s ease-in-out infinite;
+  }
+  @keyframes fractalVolatile {
+    0%, 100% { border-color: #ff4757; box-shadow: 0 0 4px rgba(255,71,87,0.5); }
+    50% { border-color: #ff6b81; box-shadow: 0 0 12px rgba(255,71,87,0.9); }
+  }
+  .fractal-card-volatile {
+    animation: fractalVolatile 0.4s ease-in-out infinite;
+  }
   .step-metric {
     font-family: 'JetBrains Mono', monospace;
     font-size: 14px;
@@ -437,7 +451,7 @@
       <option value="PEPE-USDT">PEPE/USDT</option>
       <option value="WLD-USDT">WLD/USDT</option>
       <option value="BCH-USDT">BCH/USDT</option>
-      <option value="PENGU-USDT">PENGU/USDT</option>
+      <option value="PENGU-USDT">PENGU/USDT</option><option value="ASTER-USDT">ASTER/USDT</option>
     </select>
   </div>
   <div style="margin-bottom:14px;">
@@ -565,6 +579,56 @@ function refreshTgStatus() {
 }
 
 
+function fractalPriceFmt(price) {
+  if (!price || price <= 0) return '--';
+  let formatted;
+  if (price >= 1000) formatted = price.toLocaleString('en-US', {maximumFractionDigits:0});
+  else if (price >= 100) formatted = price.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+  else if (price >= 1) formatted = price.toLocaleString('en-US', {minimumFractionDigits:4, maximumFractionDigits:4});
+  else formatted = price.toLocaleString('en-US', {minimumFractionDigits:8, maximumFractionDigits:8});
+  // 去除小數點後3個以上的尾數0
+  formatted = formatted.replace(/(\.\d*?)0{3,}$/, '$1');
+  formatted = formatted.replace(/\.$/, '');
+  return '$' + formatted;
+}
+
+// 價格波動偵測
+let _fractalPrevPrices = {};
+let _fractalVolatileUntil = {};
+function isVolatile(sym, price) {
+  const now = Date.now();
+  if (_fractalVolatileUntil[sym] && now < _fractalVolatileUntil[sym]) return true;
+  const prev = _fractalPrevPrices[sym];
+  if (prev && prev > 0) {
+    const change = Math.abs(price - prev) / prev * 100;
+    if (change > 0.5) {  // 波動超過0.5%觸發紅色閃爍
+      _fractalVolatileUntil[sym] = now + 5000;  // 閃爍5秒
+      _fractalPrevPrices[sym] = price;
+      return true;
+    }
+  }
+  _fractalPrevPrices[sym] = price;
+  return false;
+}
+
+function fractalSparkline(closes, width, height, color) {
+  if (!closes || closes.length < 2) return '';
+  const min = Math.min(...closes);
+  const max = Math.max(...closes);
+  const range = max - min || 1;
+  const stepX = width / (closes.length - 1);
+  let points = closes.map((p, i) => {
+    const x = i * stepX;
+    const y = height - ((p - min) / range) * (height - 4) - 2;
+    return x.toFixed(1) + ',' + y.toFixed(1);
+  }).join(' ');
+  const up = closes[closes.length-1] >= closes[0];
+  const lineColor = color || (up ? '#2ed573' : '#ff4757');
+  // 填滿區域
+  const areaPoints = '0,' + height + ' ' + points + ' ' + width + ',' + height;
+  return `<svg width="${width}" height="${height}" style="position:absolute;inset:0;width:100%;height:100%;opacity:0.25;pointer-events:none;"><polygon points="${areaPoints}" fill="${lineColor}" opacity="0.15"/><polyline points="${points}" fill="none" stroke="${lineColor}" stroke-width="1.2"/></svg>`;
+}
+
 function refreshFractalBot() {
   fetch('/api/fractal_bot/summary').then(r => r.json()).then(d => {
     const topList = document.getElementById('fractalTopList');
@@ -580,7 +644,14 @@ function refreshFractalBot() {
       return;
     }
     const bots = d.bots || [];
-    const totalPnl = bots.reduce((s, b) => s + (b.realized_pnl || 0), 0);
+    const totalRealized = bots.reduce((s, b) => s + (b.realized_pnl || 0), 0);
+    let totalUnrealized = 0;
+    bots.forEach(b => {
+      if (b.has_position && b.current_price && b.avg_entry) {
+        totalUnrealized += (b.current_price - b.avg_entry) * b.position;
+      }
+    });
+    const totalPnl = totalRealized + totalUnrealized;
     const activeCount = bots.filter(b => b.has_position).length;
     const totalTrades = bots.reduce((s, b) => s + (b.total_trades || 0), 0);
     const now = Date.now() / 1000;
@@ -593,7 +664,6 @@ function refreshFractalBot() {
       const sym = b.symbol.replace('USDT', '');
       const rsi = b.current_rsi || 0;
       const price = b.current_price || 0;
-      const priceStr = price < 1 ? price.toFixed(4) : price < 100 ? price.toFixed(2) : price.toFixed(0);
       // 日本風格：紅漲綠跌
       let unrealized = 0;
       if (b.has_position && b.current_price && b.avg_entry) {
@@ -601,22 +671,30 @@ function refreshFractalBot() {
       }
       const totalPnl = (b.realized_pnl || 0) + unrealized;
       // 日式顏色：紅=上漲/獲利，綠=下跌/虧損
-      const pnlColor = totalPnl > 0 ? '#ff4757' : (totalPnl < 0 ? '#2ed573' : '#888');
+      const pnlColor = totalPnl > 0 ? '#2ed573' : (totalPnl < 0 ? '#ff4757' : '#888');
       const pnlSign = totalPnl > 0 ? '+' : '';
       const posColor = b.has_position ? '#ff4757' : '#666';
       const rsiColor = rsi > 65 ? '#ff4757' : (rsi < 35 ? '#2ed573' : '#aaa');
       // 價格漲跌顏色（與前一根比較用RSI趨勢近似）
-      const priceColor = rsi > 50 ? '#ff4757' : '#2ed573';
-      return `<div style="padding:3px 5px;background:#0a0a0a;border:1px solid #333;font-family:'JetBrains Mono',monospace;" title="${sym}: RSI${rsi.toFixed(0)}">
+      const priceColor = b.last_candle_up ? '#2ed573' : '#ff4757';
+      const volatile = isVolatile(sym, price);
+      let cardClass = b.has_position ? 'fractal-card-active' : '';
+      let borderColor = b.has_position ? '#ffd700' : '#333';
+      if (volatile) {
+        cardClass = 'fractal-card-volatile';
+        borderColor = '#ff4757';
+      }
+      return `<div class="${cardClass}" style="position:relative;overflow:hidden;padding:3px 5px;background:#0a0a0a;border:1px solid ${borderColor};font-family:'JetBrains Mono',monospace;" title="${sym}: RSI${rsi.toFixed(0)} · ${fractalPriceFmt(price)}">
         <div style="display:flex;justify-content:space-between;align-items:baseline;">
           <span style="color:#ccc;font-size:9px;font-weight:700;letter-spacing:0.5px;">${sym}</span>
-          <span style="color:${priceColor};font-size:11px;font-weight:900;">${priceStr}</span>
+          <span style="color:${volatile ? '#ff4757' : priceColor};font-size:11px;font-weight:900;">${b.last_candle_up ? '▲' : '▼'}${fractalPriceFmt(price)}</span>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:2px;font-size:8px;">
           <span style="color:${rsiColor};">RSI${rsi.toFixed(0)}</span>
           <span style="color:${posColor};">${b.has_position ? '●' : '○'}</span>
-          <span style="color:${pnlColor};font-weight:700;">${pnlSign}${totalPnl.toFixed(0)}</span>
+          <span style="color:${pnlColor};font-weight:700;">${pnlSign}$${totalPnl.toFixed(2)}</span>
         </div>
+        ${fractalSparkline(b.recent_closes, 120, 32, priceColor)}
       </div>`;
     }).join('');
 
@@ -633,15 +711,19 @@ function refreshFractalBot() {
       logEl.innerHTML = recent.map(log => {
         const t = new Date(log.time * 1000);
         const timeStr = t.getHours().toString().padStart(2,'0') + ':' + t.getMinutes().toString().padStart(2,'0') + ':' + t.getSeconds().toString().padStart(2,'0');
-        const logColor = log.msg.includes('買入') ? '#2ed573' : (log.msg.includes('賣出') ? '#ff4757' : '#666');
+        let logColor = '#666';
+        if (log.msg.includes('虧損') || /-\d/.test(log.msg)) logColor = '#ff4757';
+        else if (log.msg.includes('✅') || log.msg.includes('買入')) logColor = '#2ed573';
+        else if (log.msg.includes('賣出')) logColor = '#ffa502';
         return `<div><span style="color:#444;">${timeStr}</span> <span style="color:#ff9f43;">${log.sym}</span> <span style="color:${logColor};">${log.msg}</span></div>`;
       }).join('') || '<div style="color:#444;">等待活動...</div>';
     }
 
-    const pnlColor = totalPnl > 0 ? '#ff4757' : (totalPnl < 0 ? '#2ed573' : '#888');
+    const pnlColor = totalPnl > 0 ? '#2ed573' : (totalPnl < 0 ? '#ff4757' : '#888');
     const pnlSign = totalPnl > 0 ? '+' : '';
     topPnl.textContent = pnlSign + '$' + totalPnl.toFixed(2);
     topPnl.style.color = pnlColor;
+    topPnl.title = '已實現 $' + totalRealized.toFixed(2) + ' + 未實現 $' + totalUnrealized.toFixed(2);
   }).catch(() => {
     const topStatus = document.getElementById('fractalTopStatus');
     if (topStatus) topStatus.textContent = '離線';
@@ -860,7 +942,7 @@ function applySettings() {
 </script>
 
 <!-- 帳戶資訊：左邊帳戶+盈虧，右邊分型機器人 -->
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:0;background:linear-gradient(180deg,rgba(0,210,211,0.08),transparent);border-bottom:1px solid var(--border);">
+<div style="display:grid;grid-template-columns:3fr 7fr;gap:0;background:linear-gradient(180deg,rgba(0,210,211,0.08),transparent);border-bottom:1px solid var(--border);">
   <!-- 左邊：帳戶 + 盈虧 -->
   <div style="padding:14px 20px;display:flex;flex-direction:column;gap:6px;">
     <div style="display:flex;justify-content:space-between;align-items:baseline;">
@@ -896,7 +978,7 @@ function applySettings() {
       <div id="fractalActivityLog" style="font-size:8px;color:#888;max-height:36px;overflow-y:auto;line-height:1.4;font-family:'JetBrains Mono',monospace;"></div>
     </div>
     <div style="display:flex;justify-content:space-between;align-items:baseline;border-top:1px solid var(--border);padding-top:6px;">
-      <span style="font-size:11px;color:var(--dim);letter-spacing:1px;">分型總盈虧</span>
+      <span style="font-size:11px;color:var(--dim);letter-spacing:1px;" title="已實現+未實現">分型總盈虧</span>
       <span id="fractalTotalPnl" style="font-size:18px;font-weight:900;font-family:'JetBrains Mono',monospace;">--</span>
     </div>
   </div>
@@ -1174,12 +1256,26 @@ function qtyFmt(q) {
   return q.toFixed(6);
 }
 
-function priceFmt(p) {
+// 統一價格格式：≥1000→0位, ≥100→2位, ≥1→4位, <1→8位，尾數3個0以上則去除
+function klinePriceFmt(p) {
   if (p == null || isNaN(p)) return '0.00';
-  if (p < 0.01) return p.toFixed(8);
-  if (p < 1) return p.toFixed(4);
-  if (p < 100) return p.toFixed(3);
-  return p.toFixed(2);
+  let decimals;
+  if (p >= 1000) decimals = 0;
+  else if (p >= 100) decimals = 2;
+  else if (p >= 1) decimals = 4;
+  else decimals = 8;
+  let formatted = p.toFixed(decimals);
+  // 尾數3個0以上則去除（保留1-2個0）
+  if (formatted.indexOf('.') >= 0) {
+    formatted = formatted.replace(/(\d)0{3,}$/, '$1');
+    // 如果小數點後全空，移除小數點
+    formatted = formatted.replace(/\.$/, '');
+  }
+  return formatted;
+}
+
+function priceFmt(p) {
+  return klinePriceFmt(p);
 }
 let czscStructures = null;
 let events = [];
@@ -1634,7 +1730,7 @@ function drawKlineChart() {
   ctx.lineWidth = 1;
   ctx.fillStyle = '#6b7394';
   ctx.font = '10px "JetBrains Mono", monospace';
-  const priceFmt = p => p < 0.01 ? p.toFixed(8) : p < 1 ? p.toFixed(4) : p.toFixed(2);
+  const priceFmt = klinePriceFmt;
   for (let i = 0; i <= 5; i++) {
     const y = padT + priceH / 5 * i;
     const price = max - range / 5 * i;
@@ -3125,7 +3221,7 @@ function updateUI() {
 
   // Flow metrics - real data for each step
   const lastK = klines.length ? klines[klines.length-1] : null;
-    document.getElementById('m1').textContent = klines.length + ' 根 · $' + (lastK ? lastK.c.toFixed(0) : '--');
+    document.getElementById('m1').textContent = klines.length + ' 根 · ' + (lastK ? priceFmt(lastK.c) : '--');
   // RSI indicator from latest observation
   const rsiEl = document.getElementById('rsiInfo');
   if (rsiEl) {

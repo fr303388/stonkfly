@@ -1,6 +1,6 @@
-"""
+﻿"""
 多幣種分型交易機器人（模擬）
-使用纏論分型訊號對 BTC ETH SOL ZEC PEPE DOGE WLD 進行模擬交易
+使用纏論分型訊號對 BTC ETH SOL ZEC ASTER DOGE WLD 進行模擬交易
 只交易啟動後新形成的分型，加入RSI過濾和冷卻時間
 買賣即時發送 Telegram 通知
 """
@@ -11,10 +11,15 @@ import urllib.request
 import urllib.parse
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 UTC8 = timezone(timedelta(hours=8))
 
-SYMBOLS = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "DOGEUSDT", "WLDUSDT", "PEPEUSDT", "ZECUSDT"]
+SYMBOLS = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "DOGEUSDT", "WLDUSDT", "ASTERUSDT", "ZECUSDT"]
 INITIAL_CASH = 1000.0  # 每個幣種初始資金
 STATE_FILE = Path(__file__).parent.parent / "runs" / "paper" / "fractal_multi_state.json"
 CHECK_INTERVAL = 60  # 秒
@@ -52,7 +57,7 @@ def fmt_price(price: float) -> str:
     elif price >= 1:
         return f"${price:,.4f}"
     else:
-        return f"${price:,.6f}"
+        return f"${price:,.8f}"
 
 
 def send_telegram(message: str) -> bool:
@@ -113,6 +118,31 @@ def calc_rsi(klines: list, period: int = 14) -> float:
     return 100 - (100 / (1 + rs))
 
 
+def detect_trend(klines: list, period: int = 20) -> str:
+    """簡單趨勢判斷：基於移動平均線"""
+    if len(klines) < period + 5:
+        return "neutral"
+    # 短期均線 vs 長期均線
+    short_ma = sum(k["close"] for k in klines[-5:]) / 5
+    long_ma = sum(k["close"] for k in klines[-period:]) / period
+    if short_ma > long_ma * 1.005:
+        return "uptrend"
+    elif short_ma < long_ma * 0.995:
+        return "downtrend"
+    return "neutral"
+
+
+def calc_percentile(klines: list, period: int = 50) -> float:
+    """計算目前價格在最近period根K線中的百分位"""
+    if len(klines) < 10:
+        return 50.0
+    recent = klines[-min(period, len(klines)):]
+    prices = [k["close"] for k in recent]
+    current = klines[-1]["close"]
+    below = sum(1 for p in prices if p <= current)
+    return below / len(prices) * 100
+
+
 def detect_latest_fractal(klines: list) -> dict:
     """偵測最新的分型（只看倒數第3根，需要左右各一根確認）"""
     if len(klines) < 5:
@@ -165,11 +195,12 @@ def load_state() -> dict:
                 s.setdefault("last_action", "待機中")
                 s.setdefault("activity_log", [])
                 s.setdefault("notify_enabled", TELEGRAM_NOTIFY_DEFAULT)
+            state.setdefault("notify_enabled", TELEGRAM_NOTIFY_DEFAULT)
             return state
         except Exception:
             pass
     # 初始化
-    state = {"symbols": {}, "start_time": datetime.now(UTC8).timestamp()}
+    state = {"symbols": {}, "start_time": datetime.now(UTC8).timestamp(), "notify_enabled": TELEGRAM_NOTIFY_DEFAULT}
     for sym in SYMBOLS:
         state["symbols"][sym] = {
             "cash": INITIAL_CASH,
@@ -183,6 +214,8 @@ def load_state() -> dict:
             "last_check_time": 0,
             "current_rsi": 0,
             "current_price": 0,
+            "last_candle_up": True,
+            "recent_closes": [],
             "latest_fractal": None,
             "last_action": "待機中",
             "activity_log": [],
@@ -216,6 +249,12 @@ def run_cycle():
         sym_state["current_rsi"] = round(rsi, 1)
         sym_state["current_price"] = current_price
         sym_state["last_check_time"] = now_ts
+        # 使用已收盤的最後一根K線判斷漲跌（klines[-2]，-1是正在形成的）
+        if len(klines) >= 2:
+            closed_candle = klines[-2]
+            sym_state["last_candle_up"] = closed_candle["close"] >= closed_candle["open"]
+        # 儲存最近20根收盤價用於迷你K線圖
+        sym_state["recent_closes"] = [k["close"] for k in klines[-20:]]
 
         # 暖機：第一次執行只記錄最新分型時間，不交易
         if not sym_state["warmed_up"]:
@@ -240,30 +279,49 @@ def run_cycle():
         fractal = detect_latest_fractal(klines)
         sym_state["latest_fractal"] = fractal
         if not fractal:
-            sym_state["last_action"] = f"觀察中 RSI={rsi:.0f}"
+            trend = detect_trend(klines)
+            percentile = calc_percentile(klines)
+            sym_state["last_action"] = f"觀察中 RSI={rsi:.0f} {trend} 百分位{percentile:.0f}%"
             continue
 
         # 避免重複交易同一根分型
         if fractal["time"] <= sym_state["last_fractal_time"]:
-            sym_state["last_action"] = f"已處理分型 RSI={rsi:.0f}"
+            trend = detect_trend(klines)
+            sym_state["last_action"] = f"已處理{fractal['type']}分型 RSI={rsi:.0f} {trend}"
             continue
 
         # 確認分型是新形成的（分型K線時間在最近3根內）
         fractal_age = len(klines) - 1 - fractal["index"]
         if fractal_age > 3:
-            sym_state["last_action"] = f"分型過舊({fractal_age}根) RSI={rsi:.0f}"
+            trend = detect_trend(klines)
+            sym_state["last_action"] = f"{fractal['type']}分型過舊({fractal_age}根) RSI={rsi:.0f} {trend}"
             continue
 
         sym_state["last_fractal_time"] = fractal["time"]
 
-        # 底分型 → 買入（需RSI超賣確認）
+        # 底分型 → 買入（底分型 + RSI過濾 + 趨勢判斷）
         if fractal["type"] == "bottom" and sym_state["position"] == 0:
-            if rsi > RSI_OVERSOLD:
-                sym_state["last_action"] = f"底分型但RSI={rsi:.0f}偏高"
-                sym_state["activity_log"].append({"time": now_ts, "msg": f"底分型RSI={rsi:.0f}，未達{RSI_OVERSOLD}"})
+            trend = detect_trend(klines)
+            percentile = calc_percentile(klines)
+            # 趨勢感知RSI過濾
+            if trend == "uptrend":
+                rsi_limit = 65  # 上漲趨勢回調即可買
+            elif trend == "neutral":
+                rsi_limit = 55  # 震盪中等要求
+            else:
+                rsi_limit = 40  # 下跌趨勢要超賣才買
+            if rsi > rsi_limit:
+                sym_state["last_action"] = f"底分型RSI{rsi:.0f}>{rsi_limit}({trend})"
+                sym_state["activity_log"].append({"time": now_ts, "msg": f"底分型RSI={rsi:.0f}>{rsi_limit}({trend})"})
                 if len(sym_state["activity_log"]) > 10:
                     sym_state["activity_log"] = sym_state["activity_log"][-10:]
-                print(f"[{sym}] 底分型但RSI={rsi:.1f}不夠低，跳過")
+                continue
+            # 下跌趨勢：百分位<50%才考慮（避免追高）
+            if trend == "downtrend" and percentile > 50:
+                sym_state["last_action"] = f"下跌趨勢 百分位{percentile:.0f}%過高"
+                sym_state["activity_log"].append({"time": now_ts, "msg": f"下跌趨勢百分位{percentile:.0f}%過高"})
+                if len(sym_state["activity_log"]) > 10:
+                    sym_state["activity_log"] = sym_state["activity_log"][-10:]
                 continue
             buy_amount = min(sym_state["cash"], INITIAL_CASH * 0.5)
             if buy_amount > 10:
@@ -275,7 +333,7 @@ def run_cycle():
                 trade = {
                     "time": now_ts, "side": "BUY", "price": current_price,
                     "qty": qty, "amount": buy_amount,
-                    "reason": f"底分型+RSI{rsi:.0f}超賣",
+                    "reason": f"底分型+RSI{rsi:.0f}+{trend}",
                     "pnl": 0,
                 }
                 sym_state["last_action"] = f"✅ 買入 ${current_price:.2f}"
@@ -289,19 +347,34 @@ def run_cycle():
                        f"💰 價格: {fmt_price(current_price)}\n"
                        f"💵 金額: ${buy_amount:,.2f}\n"
                        f"📦 數量: {qty:.6f}\n"
-                       f"📝 底分型確認 + RSI {rsi:.1f} 超賣")
+                       f"📝 底分型 + RSI {rsi:.1f} + {trend}")
                 if notify_enabled:
                     send_telegram(msg)
                 print(f"[{sym}] 買入 @ ${current_price:.4f} RSI={rsi:.1f}")
 
-        # 頂分型 → 賣出（需RSI超買確認）
+        # 頂分型 → 賣出（頂分型 + RSI）
         elif fractal["type"] == "top" and sym_state["position"] > 0:
-            if rsi < RSI_OVERBOUGHT:
-                sym_state["last_action"] = f"頂分型但RSI={rsi:.0f}偏低"
-                sym_state["activity_log"].append({"time": now_ts, "msg": f"頂分型RSI={rsi:.0f}，未達{RSI_OVERBOUGHT}"})
+            unrealized = (current_price - sym_state["avg_entry"]) * sym_state["position"]
+            # 虧損時不因頂分型賣出
+            if unrealized < 0:
+                sym_state["last_action"] = f"頂分型但虧損{unrealized:+.1f}"
+                sym_state["activity_log"].append({"time": now_ts, "msg": f"頂分型但虧損{unrealized:+.1f}"})
                 if len(sym_state["activity_log"]) > 10:
                     sym_state["activity_log"] = sym_state["activity_log"][-10:]
-                print(f"[{sym}] 頂分型但RSI={rsi:.1f}不夠高，跳過")
+                continue
+            # RSI<45時不賣（可能還在漲）
+            if rsi < 45:
+                sym_state["last_action"] = f"頂分型RSI{rsi:.0f}<45續抱"
+                sym_state["activity_log"].append({"time": now_ts, "msg": f"頂分型RSI{rsi:.0f}<45續抱"})
+                if len(sym_state["activity_log"]) > 10:
+                    sym_state["activity_log"] = sym_state["activity_log"][-10:]
+                continue
+            # 最小利潤0.3%才賣
+            if current_price < sym_state["avg_entry"] * 1.003:
+                sym_state["last_action"] = f"頂分型利潤<0.3%"
+                sym_state["activity_log"].append({"time": now_ts, "msg": f"頂分型利潤<0.3%"})
+                if len(sym_state["activity_log"]) > 10:
+                    sym_state["activity_log"] = sym_state["activity_log"][-10:]
                 continue
             sell_qty = sym_state["position"]
             sell_amount = sell_qty * current_price
@@ -313,7 +386,7 @@ def run_cycle():
             trade = {
                 "time": now_ts, "side": "SELL", "price": current_price,
                 "qty": sell_qty, "amount": sell_amount,
-                "reason": f"頂分型+RSI{rsi:.0f}超買",
+                "reason": f"頂分型+RSI{rsi:.0f}",
                 "pnl": pnl,
             }
             sym_state["last_action"] = f"✅ 賣出 ${current_price:.2f} {'+' if pnl>0 else ''}${pnl:.2f}"
@@ -328,7 +401,7 @@ def run_cycle():
                    f"💰 價格: {fmt_price(current_price)}\n"
                    f"💵 金額: ${sell_amount:,.2f}\n"
                    f"{pnl_emoji} 盈虧: {'+' if pnl > 0 else ''}${pnl:,.4f}\n"
-                   f"📝 頂分型確認 + RSI {rsi:.1f} 超買")
+                   f"📝 頂分型 + RSI {rsi:.1f}")
             if notify_enabled:
                 send_telegram(msg)
             print(f"[{sym}] 賣出 @ ${current_price:.4f} PnL: ${pnl:.4f} RSI={rsi:.1f}")
@@ -342,6 +415,10 @@ def set_notification(enabled: bool) -> dict:
     state = load_state()
     state["notify_enabled"] = enabled
     save_state(state)
+    if enabled:
+        send_telegram("🔔 <b>分型機器人通知已開啟</b>\n買賣訊號將即時推播")
+    else:
+        send_telegram("🔕 <b>分型機器人通知已關閉</b>\n此為最後一則訊息")
     return {"notify_enabled": enabled}
 
 
@@ -367,6 +444,8 @@ def get_summary() -> dict:
             "last_check_time": s.get("last_check_time", 0),
             "current_rsi": s.get("current_rsi", 0),
             "current_price": s.get("current_price", 0),
+            "last_candle_up": s.get("last_candle_up", True),
+            "recent_closes": s.get("recent_closes", []),
             "latest_fractal": s.get("latest_fractal"),
             "last_action": s.get("last_action", "待機中"),
             "activity_log": s.get("activity_log", [])[-5:],

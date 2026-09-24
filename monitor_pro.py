@@ -17,6 +17,12 @@ import time
 import urllib.request
 from pathlib import Path
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 import numpy as np
 from flask import Flask, jsonify, send_file, make_response, send_from_directory, request
 
@@ -115,6 +121,8 @@ def api_switch():
         'start /b "" "' + venv_py + '" monitor_pro.py',
         "timeout /t 1 /nobreak >nul",
         'start /b "" "' + venv_py + '" -u -m stonkfly.cli run --out runs/paper --products ' + pair + ' --exchange binance --steps 1000 --hz432' + (" --live" if live else ""),
+        "timeout /t 1 /nobreak >nul",
+        'start /b "" "' + venv_py + '" -u -m stonkfly.fractal_multi_bot',
         'del "%~f0"',
     ]
     Path(bat_path).write_text("\r\n".join(lines), encoding="gbk")
