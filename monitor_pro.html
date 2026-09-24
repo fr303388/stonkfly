@@ -1103,10 +1103,6 @@ function applySettings() {
     <div id="fractalDetail" style="display:block;margin-top:4px;">
       <div id="fractalActivityLog" style="font-size:8px;color:#888;max-height:36px;overflow-y:auto;line-height:1.4;font-family:'JetBrains Mono',monospace;"></div>
     </div>
-    <div style="display:flex;justify-content:space-between;align-items:baseline;border-top:1px solid var(--border);padding-top:6px;">
-      <span style="font-size:11px;color:var(--dim);letter-spacing:1px;" title="已實現+未實現">分型總盈虧</span>
-      <span id="fractalTotalPnl" style="font-size:18px;font-weight:900;font-family:'JetBrains Mono',monospace;">--</span>
-    </div>
   </div>
 </div>
 
@@ -1119,6 +1115,8 @@ function applySettings() {
     <div id="sentimentBar" style="height:100%;width:50%;background:linear-gradient(90deg,#ff6b6b,#fed330,#2ed573);transition:width 0.5s;"></div>
   </div>
   <span id="sentimentThreshold" style="font-size:10px;color:var(--dim);font-family:monospace;">買入門檻:--</span>
+  <span style="margin-left:auto;font-size:11px;color:var(--dim);letter-spacing:1px;" title="已實現+未實現">分型總盈虧</span>
+  <span id="fractalTotalPnl" style="font-size:18px;font-weight:900;font-family:'JetBrains Mono',monospace;">--</span>
 </div>
 <!-- 步驟小卡(左1/3) + 新聞(右2/3) -->
 <div style="display:flex;gap:10px;padding:8px 20px;background:rgba(0,0,0,0.3);border-bottom:1px solid var(--border);">
@@ -2584,6 +2582,7 @@ function initTvChart() {
     upColor: '#26de81', downColor: '#fc5c65',
     borderUpColor: '#26de81', borderDownColor: '#fc5c65',
     wickUpColor: '#26de81', wickDownColor: '#fc5c65',
+    priceFormat: { type: 'price', precision: 8, minMove: 0.00000001 },
   });
   // Volume on its own price scale (won't compress candles)
   try {
@@ -2629,6 +2628,15 @@ function loadTradingView(tf) {
 function updateTvChart(data, czscStructures, state) {
   try {
     if (!tvCandleSeries || !data || !data.length) return;
+
+    // 動態調整價格精度：根據最新收盤價
+    const lastPrice = data[data.length - 1].c;
+    let precision, minMove;
+    if (lastPrice >= 1000) { precision = 2; minMove = 0.01; }
+    else if (lastPrice >= 100) { precision = 4; minMove = 0.0001; }
+    else if (lastPrice >= 1) { precision = 6; minMove = 0.000001; }
+    else { precision = 8; minMove = 0.00000001; }
+    try { tvCandleSeries.applyOptions({ priceFormat: { type: 'price', precision: precision, minMove: minMove } }); } catch(e) {}
 
     // Filter by timeframe: 15m shows 6h, others show 3h
     const now = Date.now();

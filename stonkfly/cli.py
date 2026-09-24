@@ -355,6 +355,10 @@ def main():
         last_buy_time = 0.0
         MIN_HOLD_SECONDS = 900  # 最低持倉15分鐘，避免短打
         COOLDOWN_SECONDS = 40
+        _wait_rebound = False  # 虧損賣出保護：等待反彈再賣
+        _LOSS_PROTECT_PCT = 1.0  # 虧損超過1%暫緩賣出
+        _REBOUND_SELL_PCT = 0.5  # 反彈至虧損0.5%以內賣出
+        _STOP_LOSS_PCT = 5.0  # 虧損超過5%強制止損
         # 全局持久化神經模擬 executor（不使用 with，避免 shutdown 阻塞）
         _neural_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="neural-sim")
         add_count = 0  # 加倉次數計數（跨迭代持久）
@@ -658,18 +662,27 @@ def main():
                     chan_summary += f" {chan_czsc}"
 
                 # TP3止盈：價格達到TP3(均價+1.5%)立即賣出，不等纏論
-                _tp3_pct = 0.03 if _is_downtrend else 0.015  # 下跌趨勢反彈3%就跑
+                _tp3_pct = 0.015  # TP3 = 均價+1.5%
                 _tp3_price = avg_entry_price * (1 + _tp3_pct) if avg_entry_price > 0 else 0
                 if has_position and _tp3_price > 0 and current_price >= _tp3_price:
                     neural["side"] = "SELL"
                     neural["fly_side"] = fly_natural_side
                     neural["chan_side"] = chan_sig
                     _pnl_pct = (current_price - avg_entry_price) / avg_entry_price * 100
-                    neural["decision_note"] = f"[TP3止盈] 均價${avg_entry_price:.2f} 現價${current_price:.2f} 達到TP3(${_tp3_price:.2f})，全數出清，盈虧{_pnl_pct:+.3f}%"
+                    neural["decision_note"] = f"[TP3止盈] 均價${avg_entry_price:.4f} 現價${current_price:.4f} 達到TP3(${_tp3_price:.4f})，全數出清，盈虧{_pnl_pct:+.3f}%"
                 # 纏論賣出模式：有持倉時，纏論指示SELL就全數出清
                 elif has_position and chan_sig == "SELL" and (time.time() - last_buy_time >= MIN_HOLD_SECONDS or take_profit_hit):
-                    # 纏論指示賣出，全數出清
-                    neural["side"] = "SELL"
+                    _pnl_pct = (current_price - avg_entry_price) / avg_entry_price * 100 if avg_entry_price > 0 else 0
+                    # 虧損保護：虧損超過1%且未到止損線，暫緩賣出等待反彈
+                    if _pnl_pct < -_LOSS_PROTECT_PCT and _pnl_pct > -_STOP_LOSS_PCT and not take_profit_hit:
+                        _wait_rebound = True
+                        neural["side"] = "HOLD"
+                        neural["fly_side"] = fly_natural_side
+                        neural["chan_side"] = "SELL"
+                        neural["decision_note"] = f"[虧損保護] 纏論賣出訊號但現價{_pnl_pct:+.2f}%低於均價{_LOSS_PROTECT_PCT}%，暫緩賣出等待反彈至-{_REBOUND_SELL_PCT}%以內 | 均價${avg_entry_price:.4f} 現價${current_price:.4f}"
+                    else:
+                        _wait_rebound = False
+                        neural["side"] = "SELL"
                     neural["fly_side"] = fly_natural_side
                     neural["chan_side"] = "SELL"
                     _pnl_pct = (current_price - avg_entry_price) / avg_entry_price * 100 if avg_entry_price > 0 else 0
@@ -684,6 +697,21 @@ def main():
                         decision_reason = f"纏論指標觸發賣出:{chan_summary} 信心{chan_conf:.0f}%，果蠅建議{fly_natural_side}，賣出信心{_sell_conf:.0f}%，跟隨纏論全數出清，盈虧{_pnl_pct:+.3f}%"
                     neural["decision_note"] = f"{decision_tag} {decision_reason}"
                     chan_observations += 1
+                elif has_position and _wait_rebound:
+                    # 反彈等待中：價格回到均價0.5%以內就賣出，或跌破-5%止損
+                    _pnl_pct = (current_price - avg_entry_price) / avg_entry_price * 100 if avg_entry_price > 0 else 0
+                    if _pnl_pct >= -_REBOUND_SELL_PCT or _pnl_pct <= -_STOP_LOSS_PCT:
+                        _wait_rebound = False
+                        neural["side"] = "SELL"
+                        neural["fly_side"] = fly_natural_side
+                        neural["chan_side"] = "SELL"
+                        _reason = "反彈至均價附近" if _pnl_pct >= -_REBOUND_SELL_PCT else f"跌破-{_STOP_LOSS_PCT}%止損"
+                        neural["decision_note"] = f"[反彈賣出] {_reason}，均價${avg_entry_price:.4f} 現價${current_price:.4f} ({_pnl_pct:+.2f}%)，全數出清"
+                    else:
+                        neural["side"] = "HOLD"
+                        neural["fly_side"] = fly_natural_side
+                        neural["chan_side"] = chan_sig
+                        neural["decision_note"] = f"[反彈等待中] 均價${avg_entry_price:.4f} 現價${current_price:.4f} ({_pnl_pct:+.2f}%) | 反彈至-{_REBOUND_SELL_PCT}%賣出，跌破-{_STOP_LOSS_PCT}%止損"
                 elif has_position:
                     # 已有持倉，纏論未說賣出，繼續持有
                     neural["side"] = "HOLD"
@@ -817,6 +845,8 @@ def main():
                 last_trade_time = time.time()  # 40-second cooldown after each trade
                 last_trade_side = neural.get("side", None)  # 記錄交易類型用於冷卻
                 exec_side = neural.get("side", order.get("side", ""))
+                if exec_side == "SELL":
+                    _wait_rebound = False  # 賣出後重置反彈等待狀態
                 if exec_side == "BUY":
                     last_buy_time = time.time()
                     tp_stage = 0  # track buy time for min hold

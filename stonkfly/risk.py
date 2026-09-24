@@ -57,10 +57,15 @@ class Guard:
             size = down(budget / limit, q.base_increment)
         else:
             limit = down(q.bid * (1 - D(self.s.slippage)), q.price_increment)
-            size = down(
-                min(self.l.positions.get(product, D(0)), D(self.s.order_limit) / q.ask),
-                q.base_increment,
-            )
+            if self.strategy_budget is not None:
+                # 賣出也使用 strategy_budget（全數出清時=持倉總價值），不再被 order_limit=$50 限制
+                max_qty_by_budget = D(self.strategy_budget) / q.ask
+                size = down(min(self.l.positions.get(product, D(0)), max_qty_by_budget), q.base_increment)
+            else:
+                size = down(
+                    min(self.l.positions.get(product, D(0)), D(self.s.order_limit) / q.ask),
+                    q.base_increment,
+                )
         if limit <= 0 or size < q.minimum_base or size * limit < q.minimum_quote:
             raise Veto("Insufficient funds/position or below exchange minimum")
         return {
