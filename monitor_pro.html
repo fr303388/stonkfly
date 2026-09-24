@@ -3035,6 +3035,19 @@ function updatePnL(meta, simEquity, initial) {
   if (pnlBox) {
     pnlBox.classList.remove('pnl-profit', 'pnl-loss');
     pnlBox.classList.add(totalPnl >= 0 ? 'pnl-profit' : 'pnl-loss');
+
+  // 市場情緒指標
+  const sentiment = latest.market_sentiment || (latest.observation && latest.observation.market_sentiment);
+  if (sentiment) {
+    const sLabel = document.getElementById("sentimentLabel");
+    const sFng = document.getElementById("sentimentFng");
+    const sBar = document.getElementById("sentimentBar");
+    const sThresh = document.getElementById("sentimentThreshold");
+    if (sLabel) { sLabel.textContent = sentiment.label || "--"; sLabel.style.color = sentiment.score > 0.3 ? "#2ed573" : sentiment.score < -0.3 ? "#ff6b6b" : "#fed330"; }
+    if (sFng) sFng.textContent = "FNG:" + (sentiment.fng_value || "--") + "(" + (sentiment.fng_class || "--") + ")";
+    if (sBar) sBar.style.width = ((sentiment.fng_value || 50)) + "%";
+    if (sThresh) sThresh.textContent = "買入門檻:" + (sentiment.buy_threshold || "--") + "%";
+  }
   }
 
   // 果蠅和無腦的總盈虧（nbRealized已在上方宣告）

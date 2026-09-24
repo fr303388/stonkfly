@@ -16,6 +16,7 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeou
 
 from .config import D, Settings
 from .telegram_notify import notify_trade as _telegram_notify_trade
+from .market_sentiment import get_sentiment as _get_market_sentiment
 
 
 def _acquire_worker_lock(path):
@@ -411,11 +412,16 @@ def main():
             has_position = pos_qty > 0.0001
             # [測試版] 純纏論15分K線自動交易 + 果蠅觀察學習
             chan_result = None
+            _market_sentiment = None
             fly_natural_side = "HOLD"  # 果蠅自然決策（observe之後才知道，先預設）
             if chan_strategy is not None:
                 chan_result = chan_strategy.analyze(interval="15m")
                 chan_sig = chan_result.get("signal", "HOLD")
                 chan_reason = chan_result.get("reason", "")
+                try:
+                    _market_sentiment = _get_market_sentiment()
+                except Exception:
+                    _market_sentiment = None
                 if chan_sig == "BUY" and not has_position:
                     chan_strategy.mark_traded()
                     chan_observations += 1
@@ -619,7 +625,8 @@ def main():
 
                 # 果蠅參考纏論建議再下單：不能自己無腦下單
                 # 基礎買入：雙方共識 或 纏論主導(果蠅不反對)
-                want_buy = (fly_natural_side == "BUY" and chan_sig == "BUY") or (chan_sig == "BUY" and fly_natural_side == "HOLD" and chan_conf > 70)
+                _sentiment_threshold = _market_sentiment.get("buy_threshold", 70) if _market_sentiment else 70
+                want_buy = (fly_natural_side == "BUY" and chan_sig == "BUY") or (chan_sig == "BUY" and fly_natural_side == "HOLD" and chan_conf > _sentiment_threshold)
                 # 基礎賣出：雙方共識 或 纏論主導(果蠅不反對)
                 want_sell = (fly_natural_side == "SELL" and chan_sig == "SELL") or (chan_sig == "SELL" and fly_natural_side == "HOLD" and chan_conf > 70)
 
@@ -738,6 +745,7 @@ def main():
                 "chan_auto": chan_result,
                 "chan_observations": chan_observations,
                 "chan_imitation_rate": (chan_imitation_correct / chan_observations * 100) if chan_observations > 0 else 0,
+                "market_sentiment": _market_sentiment,
             }
             # Periodically compact SQLite WAL to prevent growth
             if count > 0 and count % 100 == 0:
@@ -781,7 +789,7 @@ def main():
                         raise Veto("Price moved beyond neural observation tolerance")
                     provider.quotes = fresh
                     # Use batch_size for buy quantity if available, default 1.0 BTC
-                    fixed_btc = neural.get("batch_size", 1.0)
+                    fixed_btc = neural.get("batch_size", 1000.0 / current_price if current_price > 0 else 1.0)  # 每次買入$1000市值
                     if neural["side"] == "BUY":
                         guard.strategy_budget = fixed_btc * current_price * 1.01  # 1% buffer for exact fill
                     else:
@@ -890,6 +898,7 @@ def main():
                 "strategy": strategy.to_dict(),
                 "no_brain": _nb_status,
                 "no_brain_action": _nb_result,
+                "market_sentiment": _market_sentiment,
             }
             # Only record actual FILLED trades, not unexecuted BUY/SELL decisions
             _is_trade = order.get("status") in ("FILLED", "SETTLED")
