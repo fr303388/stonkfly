@@ -41,7 +41,7 @@
     background: var(--bg);
     color: var(--text);
     min-height: 100vh;
-    overflow-x: hidden;
+    overflow-x: hidden !important;
   }
   /* Header */
   .header {
@@ -153,8 +153,8 @@
   }
   .flow-card.active { border-color: var(--cyan); box-shadow: 0 0 12px rgba(77,208,225,0.2); }
   .flow-card.active .step-num { background: var(--green); }
-  .flow-card.walking { border-color: var(--yellow); box-shadow: 0 0 16px rgba(255,193,7,0.35); animation: walkPulse 0.6s ease-in-out infinite alternate; }
-  .flow-card.walking .step-num { background: var(--yellow); color: #000; }
+  .jp-step.walking { border-color: rgba(255,193,7,0.4); background: rgba(255,193,7,0.05); }
+  .jp-step.walking .jp-num { background: #ffc107; color: #000; }
   @keyframes walkPulse { from { box-shadow: 0 0 8px rgba(255,193,7,0.2); } to { box-shadow: 0 0 20px rgba(255,193,7,0.5); } }
   .fly-indicator { position: absolute; top: -14px; right: 8px; font-size: 18px; z-index: 10; animation: flyBob 0.5s ease-in-out infinite alternate; filter: drop-shadow(0 0 4px rgba(255,193,7,0.6)); }
   @keyframes flyBob { from { transform: translateY(0) rotate(-5deg); } to { transform: translateY(-4px) rotate(5deg); } }
@@ -388,6 +388,71 @@
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: var(--bg); }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+.news-item { display: block; transition: all 0.15s ease; border-left: 2px solid transparent; }
+.news-item:hover { background: rgba(255,255,255,0.04); border-left-color: var(--accent, #4b7bec); padding-left: 4px; }
+.news-item:hover > span { background: rgba(255,255,255,0.08) !important; border-color: rgba(255,255,255,0.12) !important; }
+.news-item:active { opacity: 0.8; }
+* { box-sizing: border-box; }
+  .panel-body, .flow, .trade-log, #newsHeadlines { overflow-x: hidden !important; }
+
+/* 日式步驟小卡 */
+.jp-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: 'Noto Sans TC', sans-serif;
+}
+.jp-step:hover {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.12);
+}
+.jp-step.active {
+  background: rgba(46,213,115,0.08);
+  border-color: rgba(46,213,115,0.3);
+}
+.jp-step.active .jp-num {
+  background: #2ed573;
+  color: #000;
+}
+.jp-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: rgba(255,255,255,0.1);
+  color: #ccc;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: monospace;
+  flex-shrink: 0;
+}
+.jp-title {
+  font-size: 11px;
+  color: #ccc;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.jp-val { min-width: 50px; text-align: right;
+  font-size: 10px;
+  color: #888;
+  font-family: monospace;
+  flex-shrink: 0;
+}
+
+@keyframes scanSweep { 0% { left: -100%; } 100% { left: 100%; } }
+@keyframes glowLine { 0%,100% { opacity: 0.3; } 50% { opacity: 1; } }
+.neural-card:hover { transform: translateY(-2px); box-shadow: 0 4px 20px rgba(0,0,0,0.3); transition: all 0.2s ease; }
 </style>
 </head>
 <body>
@@ -537,6 +602,19 @@
     </div>
     <div style="font-size:9px;color:#666;margin-top:4px;" id="fractalNotifyStatus">載入中...</div>
   </div>
+
+  <!-- 新聞音效開關 -->
+  <div style="margin-top:12px;padding:10px;background:#0a1a0a;border:1px solid #1a3a1a;border-radius:10px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-size:11px;color:#2ed573;letter-spacing:1px;font-weight:700;">🔔 新聞更新音效</span>
+      <label style="position:relative;display:inline-block;width:40px;height:20px;cursor:pointer;">
+        <input type="checkbox" id="newsSoundToggle" style="opacity:0;width:0;height:0;" checked onchange="toggleNewsSound()">
+        <span style="position:absolute;inset:0;background:#2a5a2a;border-radius:20px;transition:0.3s;" id="newsSoundSlider"></span>
+        <span style="position:absolute;height:16px;width:16px;left:22px;bottom:2px;background:#fff;border-radius:50%;transition:0.3s;" id="newsSoundDot"></span>
+      </label>
+    </div>
+    <div style="font-size:9px;color:#666;margin-top:4px;" id="newsSoundStatus">已開啟，新聞更新時播放提示音</div>
+  </div>
   <button onclick="applySettings()" style="width:100%;padding:10px;border-radius:10px;border:none;
     background:linear-gradient(135deg,#00d2d3,#00ff88);color:#000;font-weight:900;font-size:14px;cursor:pointer;margin-top:8px;">
     🔄 切換並重啟
@@ -546,6 +624,54 @@
 
 <script>
 
+
+
+// 新聞音效
+let lastNewsTitle = "";
+let newsSoundEnabled = true;
+
+function toggleNewsSound() {
+  const toggle = document.getElementById("newsSoundToggle");
+  const slider = document.getElementById("newsSoundSlider");
+  const dot = document.getElementById("newsSoundDot");
+  const status = document.getElementById("newsSoundStatus");
+  newsSoundEnabled = toggle.checked;
+  if (newsSoundEnabled) {
+    slider.style.background = "#2a5a2a";
+    dot.style.left = "22px";
+    status.textContent = "已開啟，新聞更新時播放提示音";
+    status.style.color = "#2ed573";
+  } else {
+    slider.style.background = "#333";
+    dot.style.left = "2px";
+    status.textContent = "已關閉";
+    status.style.color = "#888";
+  }
+  // 通知後端並發送Telegram
+  fetch("/api/news_sound/toggle", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({enabled: newsSoundEnabled})
+  }).catch(e => console.log("sound toggle error:", e));
+}
+
+function playNewsAlert() {
+  if (!newsSoundEnabled) return;
+  const audio = document.getElementById("newsAlertSound");
+  if (audio) {
+    audio.currentTime = 0;
+    audio.play().catch(e => {});
+  }
+}
+
+function checkNewsUpdate(headlines) {
+  if (!headlines || headlines.length === 0) return;
+  const firstTitle = headlines[0].title_zh || headlines[0].title || "";
+  if (lastNewsTitle && firstTitle !== lastNewsTitle) {
+    playNewsAlert();
+  }
+  lastNewsTitle = firstTitle;
+}
 
 function showTgEdit() {
   document.getElementById('tgConfiguredView').style.display = 'none';
@@ -984,6 +1110,51 @@ function applySettings() {
   </div>
 </div>
 
+<!-- 市場情緒指標 -->
+<div style="padding:6px 20px;background:linear-gradient(90deg,rgba(255,107,107,0.05),rgba(46,213,115,0.05));border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;">
+  <span style="font-size:10px;color:var(--dim);letter-spacing:1px;">市場情緒</span>
+  <span id="sentimentLabel" style="font-size:13px;font-weight:800;font-family:monospace;">--</span>
+  <span id="sentimentFng" style="font-size:11px;color:#aaa;font-family:monospace;">FNG:--</span>
+  <div style="flex:1;height:6px;background:#1a1a1a;border-radius:3px;overflow:hidden;max-width:200px;">
+    <div id="sentimentBar" style="height:100%;width:50%;background:linear-gradient(90deg,#ff6b6b,#fed330,#2ed573);transition:width 0.5s;"></div>
+  </div>
+  <span id="sentimentThreshold" style="font-size:10px;color:var(--dim);font-family:monospace;">買入門檻:--</span>
+</div>
+<!-- 步驟小卡(左1/3) + 新聞(右2/3) -->
+<div style="display:flex;gap:10px;padding:8px 20px;background:rgba(0,0,0,0.3);border-bottom:1px solid var(--border);">
+  <div style="flex:1;min-width:0;display:grid;grid-template-columns:1fr 1fr;gap:4px;" id="jpSteps">
+    <div class="jp-step" data-step="1" onclick="focusPanel('klineChart')">
+      <span class="jp-num">1</span><span class="jp-title">市場數據</span><span class="jp-val" id="m1">--</span>
+    </div>
+    <div class="jp-step" data-step="2" onclick="focusPanel('eyeChart')">
+      <span class="jp-num">2</span><span class="jp-title">視網膜編碼</span><span class="jp-val" id="m2">--</span>
+    </div>
+    <div class="jp-step" data-step="3" onclick="focusPanel('brain3d'); if(!heatmapOn) toggleHeatmap();">
+      <span class="jp-num">3</span><span class="jp-title">神經模擬</span><span class="jp-val" id="m3">--</span>
+    </div>
+    <div class="jp-step" data-step="4" onclick="focusPanel('decision')">
+      <span class="jp-num">4</span><span class="jp-title">解碼決策</span><span class="jp-val" id="m4">--</span>
+    </div>
+    <div class="jp-step" data-step="5" onclick="focusPanel('execStatus')">
+      <span class="jp-num">5</span><span class="jp-title">風控執行</span><span class="jp-val" id="m5">--</span>
+    </div>
+    <div class="jp-step" data-step="6" onclick="focusPanel('decision')">
+      <span class="jp-num">6</span><span class="jp-title">強化學習</span><span class="jp-val" id="m6">--</span>
+    </div>
+  </div>
+  <div style="flex:2;min-width:0;display:flex;flex-direction:column;gap:4px;">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <span style="font-size:10px;color:var(--dim);letter-spacing:1px;">果蠅情緒</span>
+      <span id="flyEmotion" style="font-size:13px;font-weight:800;color:#fed330;">--</span>
+      <span id="flyEmotionDetail" style="font-size:10px;color:#888;">--</span>
+      <span id="newsStats" style="font-size:12px;color:var(--dim);font-family:monospace;margin-left:auto;">--</span>
+      <span id="newsUpdateTime" style="font-size:9px;color:#555;">--</span>
+    </div>
+    <div id="newsHeadlines" style="display:flex;flex-direction:column;gap:3px;flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;max-height:140px;">
+      <span style="font-size:10px;color:#666;">載入新聞中…</span>
+    </div>
+  </div>
+</div>
 <!-- 隱藏但保留ID給JS使用 -->
 <div style="display:none;">
   <span id="initialCash">$100</span>
@@ -995,40 +1166,7 @@ function applySettings() {
   <span id="computeStatus"></span>
 </div>
 
-<!-- Process flow -->
-<div class="flow" id="flow">
-  <div class="flow-card" data-step="1" onclick="focusPanel('klineChart')">
-    <div><span class="step-num">1</span><span class="step-title">市場數據(15分) + RSI + 纏論</span></div>
-    <div class="step-metric" id="m1">-- 根 K 線</div>
-    <div class="step-desc" id="rsiInfo">RSI: --</div>
-    <div class="step-desc" id="czscInfo" style="margin-top:4px;color:var(--yellow);">纏論: 分析中…</div>
-  </div>
-  <div class="flow-card" data-step="2" onclick="focusPanel('eyeChart')">
-    <div><span class="step-num">2</span><span class="step-title">視網膜編碼</span></div>
-    <div class="step-metric" id="m2">-- 感光細胞</div>
-    <div class="step-desc">3,335 視網膜輸入神經元，R1-R6 感光細胞層 · 輸入 120 根 15分K線，編碼為 320×180 感光影像</div>
-  </div>
-  <div class="flow-card" data-step="3" onclick="focusPanel('brain3d'); if(!heatmapOn) toggleHeatmap();">
-    <div><span class="step-num">3</span><span class="step-title">神經模擬</span></div>
-    <div class="step-metric" id="m3">-- spikes</div>
-    <div class="step-desc">16.6 萬神經元聯結，2,560 萬突觸，每步 0.1ms 模擬</div>
-  </div>
-  <div class="flow-card" data-step="4" onclick="focusPanel('decision')">
-    <div><span class="step-num">4</span><span class="step-title">神經解碼決策</span></div>
-    <div class="step-metric" id="m4">--</div>
-    <div class="step-desc" id="m4desc">感光細胞輸入價格走勢，DNp20 左右解碼，DNpe017 閘門控制</div>
-  </div>
-  <div class="flow-card" data-step="5" onclick="focusPanel('execStatus')">
-    <div><span class="step-num">5</span><span class="step-title">風控與執行</span></div>
-    <div class="step-metric" id="m5">--</div>
-    <div class="step-desc">買賣訊號經風控檢查，通過後執行訂單</div>
-  </div>
-  <div class="flow-card" data-step="6" onclick="focusPanel('decision')">
-    <div><span class="step-num">6</span><span class="step-title">強化學習</span></div>
-    <div class="step-metric" id="m6">--</div>
-    <div class="step-desc" id="m6desc">盈利刺激 PAM11 獎勵多巴胺，虧損刺激 PPL101 厭惡，調整 KC→MBON 突觸</div>
-  </div>
-</div>
+
 
 <!-- Main full-width layout -->
 <div style="display:flex;flex-direction:column;gap:12px;padding:12px;">
@@ -1067,78 +1205,110 @@ function applySettings() {
     <div class="panel-header">
       <span><span class="icon">⚡</span>神經活動監測</span>
     </div>
-    <div class="panel-body" style="flex:1;min-height:0;display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden;">
-      <div style="display:flex;gap:12px;align-items:center;margin-bottom:4px;">
-        <div class="decision-big" id="decision" style="flex:1;text-align:center;">HOLD</div>
-        <div id="positionDir" style="flex:1;text-align:center;font-size:22px;font-weight:900;font-family:'JetBrains Mono',monospace;color:var(--dim);letter-spacing:2px;"></div>
-      </div>
-      <div class="exec-status" id="execStatus">執行: --</div>
-      <div id="stimStatus" style="font-size:11px;color:var(--dim);text-align:center;margin-top:2px;">無刺激</div>
-      <div class="hz-row">
-        <span class="hz-label">DNp20 放電</span>
-        <div class="hz-bar-bg"><div class="hz-bar" id="leftBar" style="background:var(--red);width:0%"></div></div>
-        <span class="hz-val" id="leftHz" style="color:var(--red)">-- Hz</span>
-      </div>
-      <div class="hz-row">
-        <span class="hz-label">DNp20 放電</span>
-        <div class="hz-bar-bg"><div class="hz-bar" id="rightBar" style="background:var(--green);width:0%"></div></div>
-        <span class="hz-val" id="rightHz" style="color:var(--green)">-- Hz</span>
-      </div>
-      <div class="hz-row">
-        <span class="hz-label">閘門放電</span>
-        <div class="hz-bar-bg"><div class="hz-bar" id="diffBar" style="background:var(--cyan);width:0%"></div></div>
-        <span class="hz-val" id="diffHz" style="color:var(--cyan)">-- Hz</span>
-      </div>
-      <div class="hz-row">
-        <span class="hz-label">KC 放電</span>
-        <div class="hz-bar-bg"><div class="hz-bar" id="kcBar" style="background:linear-gradient(90deg,var(--cyan),var(--green));width:0%"></div></div>
-        <span class="hz-val" id="kcSpikes" style="color:var(--cyan)">--</span>
-      </div>
-      <div class="hz-row">
-        <span class="hz-label">432Hz</span>
-        <div class="hz-bar-bg"><div class="hz-bar" id="hz432Bar" style="background:linear-gradient(90deg,#4dd0e1,#a55eea);width:0%"></div></div>
-        <span class="hz-val" id="hz432Status" style="color:var(--dim)">OFF</span>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:6px 0;">
-        <div style="background:rgba(77,208,225,0.08);border-radius:4px;padding:5px;text-align:center;">
-          <div style="font-size:9px;color:var(--dim);">獎勵</div>
-          <div style="font-size:14px;font-weight:700;color:var(--green);font-family:'JetBrains Mono',monospace;" id="pam11Spikes">--</div>
+    <div class="panel-body neural-panel" style="flex:1;min-height:0;display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden;padding:10px;gap:8px;background:radial-gradient(ellipse at top,rgba(20,10,30,0.6),rgba(0,0,0,0.8));position:relative;">
+      <div style="position:absolute;top:0;left:0;right:0;bottom:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(255,255,255,0.01) 2px,rgba(255,255,255,0.01) 4px);pointer-events:none;z-index:0;"></div>
+      <!-- 決策顯示 -->
+      <div style="display:flex;gap:8px;position:relative;z-index:1;">
+        <div id="decision" style="flex:1;text-align:center;padding:10px 6px;background:linear-gradient(135deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01));border:1px solid rgba(255,255,255,0.1);border-radius:8px;font-size:20px;font-weight:900;letter-spacing:4px;font-family:'JetBrains Mono',monospace;color:var(--dim);text-shadow:0 0 20px rgba(255,255,255,0.15);position:relative;overflow:hidden;">
+          <div style="position:absolute;top:0;left:-100%;width:100%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.05),transparent);animation:scanSweep 3s linear infinite;"></div>
+          HOLD
         </div>
-        <div style="background:rgba(255,107,107,0.08);border-radius:4px;padding:5px;text-align:center;">
-          <div style="font-size:9px;color:var(--dim);">厭惡</div>
-          <div style="font-size:14px;font-weight:700;color:var(--red);font-family:'JetBrains Mono',monospace;" id="ppl101Spikes">--</div>
-        </div>
+        <div id="positionDir" style="flex:1;text-align:center;padding:10px 6px;background:linear-gradient(135deg,rgba(77,208,225,0.05),rgba(168,85,247,0.05));border:1px solid rgba(77,208,225,0.15);border-radius:8px;font-size:20px;font-weight:900;font-family:'JetBrains Mono',monospace;color:#4dd0e1;letter-spacing:3px;display:flex;align-items:center;justify-content:center;text-shadow:0 0 10px rgba(77,208,225,0.3);">--</div>
       </div>
-      <!-- 纏論學習數據 -->
-      <div style="background:rgba(168,85,247,0.06);border:1px solid rgba(168,85,247,0.2);border-radius:4px;padding:6px 8px;margin:4px 0;width:100%;box-sizing:border-box;">
-        <div style="font-size:10px;color:var(--dim);margin-bottom:3px;">📚 纏論學習</div>
-        <div style="font-size:10px;line-height:1.9;">
-          <div>
-            <span style="color:var(--dim);">時間</span> <b id="chanStudyTime" style="color:var(--text);">--</b>
-            <span style="color:var(--dim);margin-left:12px;">理論</span> <b id="chanAvgLevel" style="color:var(--cyan);">--%</b>
-            <span style="color:var(--dim);margin-left:12px;">實戰</span> <b id="practicalAvg" style="color:var(--yellow);">--%</b>
+      <!-- 狀態列 -->
+      <div style="display:flex;gap:6px;font-size:10px;position:relative;z-index:1;">
+        <div id="execStatus" style="flex:1;padding:5px 8px;background:rgba(77,208,225,0.08);border:1px solid rgba(77,208,225,0.2);border-radius:4px;text-align:center;color:#4dd0e1;font-weight:600;">執行: --</div>
+        <div id="stimStatus" style="flex:1;padding:5px 8px;background:rgba(255,193,7,0.08);border:1px solid rgba(255,193,7,0.2);border-radius:4px;text-align:center;color:#ffc107;font-weight:600;">無刺激</div>
+      </div>
+      <!-- 神經放電 2x2 -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;position:relative;z-index:1;">
+        <div class="neural-card" style="background:linear-gradient(135deg,rgba(255,107,107,0.08),rgba(255,107,107,0.02));border:1px solid rgba(255,107,107,0.2);border-radius:8px;padding:8px 10px;position:relative;overflow:hidden;">
+          <div style="position:absolute;top:0;right:0;width:30px;height:30px;background:radial-gradient(circle,rgba(255,107,107,0.2),transparent);"></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+            <span style="font-size:9px;color:#ff6b6b;letter-spacing:2px;font-weight:700;">DNp20 L</span>
+            <span id="leftHz" style="font-size:11px;font-weight:700;color:#ff6b6b;font-family:monospace;text-shadow:0 0 6px rgba(255,107,107,0.5);">--</span>
           </div>
-          <div>
-            <span style="color:var(--dim);">勝率</span> <b id="tradeWinRate" style="color:var(--green);">--%</b>
-            <span style="color:var(--dim);margin-left:12px;">買點</span> <b id="buyConf" style="color:var(--green);">--%</b>
-            <span style="color:var(--dim);margin-left:12px;">賣點</span> <b id="sellConf" style="color:var(--red);">--%</b>
+          <div style="height:5px;background:rgba(0,0,0,0.4);border-radius:3px;overflow:hidden;">
+            <div id="leftBar" style="height:100%;background:linear-gradient(90deg,#ff6b6b,#ffa502);width:0%;box-shadow:0 0 10px rgba(255,107,107,0.6);transition:width 0.4s ease;"></div>
           </div>
         </div>
+        <div class="neural-card" style="background:linear-gradient(135deg,rgba(46,213,115,0.08),rgba(46,213,115,0.02));border:1px solid rgba(46,213,115,0.2);border-radius:8px;padding:8px 10px;position:relative;overflow:hidden;">
+          <div style="position:absolute;top:0;right:0;width:30px;height:30px;background:radial-gradient(circle,rgba(46,213,115,0.2),transparent);"></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+            <span style="font-size:9px;color:#2ed573;letter-spacing:2px;font-weight:700;">DNp20 R</span>
+            <span id="rightHz" style="font-size:11px;font-weight:700;color:#2ed573;font-family:monospace;text-shadow:0 0 6px rgba(46,213,115,0.5);">--</span>
+          </div>
+          <div style="height:5px;background:rgba(0,0,0,0.4);border-radius:3px;overflow:hidden;">
+            <div id="rightBar" style="height:100%;background:linear-gradient(90deg,#2ed573,#7bed9f);width:0%;box-shadow:0 0 10px rgba(46,213,115,0.6);transition:width 0.4s ease;"></div>
+          </div>
+        </div>
+        <div class="neural-card" style="background:linear-gradient(135deg,rgba(77,208,225,0.08),rgba(77,208,225,0.02));border:1px solid rgba(77,208,225,0.2);border-radius:8px;padding:8px 10px;position:relative;overflow:hidden;">
+          <div style="position:absolute;top:0;right:0;width:30px;height:30px;background:radial-gradient(circle,rgba(77,208,225,0.2),transparent);"></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+            <span style="font-size:9px;color:#4dd0e1;letter-spacing:2px;font-weight:700;">閘門 GATE</span>
+            <span id="diffHz" style="font-size:11px;font-weight:700;color:#4dd0e1;font-family:monospace;text-shadow:0 0 6px rgba(77,208,225,0.5);">--</span>
+          </div>
+          <div style="height:5px;background:rgba(0,0,0,0.4);border-radius:3px;overflow:hidden;">
+            <div id="diffBar" style="height:100%;background:linear-gradient(90deg,#4dd0e1,#81ecec);width:0%;box-shadow:0 0 10px rgba(77,208,225,0.6);transition:width 0.4s ease;"></div>
+          </div>
+        </div>
+        <div class="neural-card" style="background:linear-gradient(135deg,rgba(168,85,247,0.08),rgba(168,85,247,0.02));border:1px solid rgba(168,85,247,0.2);border-radius:8px;padding:8px 10px;position:relative;overflow:hidden;">
+          <div style="position:absolute;top:0;right:0;width:30px;height:30px;background:radial-gradient(circle,rgba(168,85,247,0.2),transparent);"></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+            <span style="font-size:9px;color:#a855f7;letter-spacing:2px;font-weight:700;">KC 肯楊</span>
+            <span id="kcSpikes" style="font-size:11px;font-weight:700;color:#a855f7;font-family:monospace;text-shadow:0 0 6px rgba(168,85,247,0.5);">--</span>
+          </div>
+          <div style="height:5px;background:rgba(0,0,0,0.4);border-radius:3px;overflow:hidden;">
+            <div id="kcBar" style="height:100%;background:linear-gradient(90deg,#a855f7,#d8b4fe);width:0%;box-shadow:0 0 10px rgba(168,85,247,0.6);transition:width 0.4s ease;"></div>
+          </div>
+        </div>
       </div>
-      <!-- Advanced Learning -->
-      <div style="background:rgba(0,210,211,0.06);border:1px solid rgba(0,210,211,0.2);border-radius:6px;padding:8px 10px;margin-top:6px;">
-        <div style="font-size:10px;color:#00d2d3;font-weight:700;margin-bottom:4px;letter-spacing:1px;">🧠 進階學習</div>
-        <div id="advKnowledge" style="font-size:10px;color:var(--text);font-family:'JetBrains Mono',monospace;line-height:1.6;">載入中…</div>
-        <div id="advReviews" style="font-size:10px;color:var(--dim);font-family:'JetBrains Mono',monospace;margin-top:4px;"></div>
-        <div id="advLessons" style="font-size:10px;color:#ffa502;font-family:'JetBrains Mono',monospace;margin-top:4px;"></div>
+      <!-- 432Hz -->
+      <div style="background:linear-gradient(90deg,rgba(0,210,211,0.06),rgba(84,160,255,0.06));border:1px solid rgba(0,210,211,0.2);border-radius:8px;padding:8px 12px;display:flex;align-items:center;gap:10px;position:relative;z-index:1;">
+        <span style="font-size:10px;color:#00d2d3;letter-spacing:2px;font-weight:700;flex-shrink:0;">🎵 432Hz</span>
+        <div style="flex:1;height:5px;background:rgba(0,0,0,0.4);border-radius:3px;overflow:hidden;">
+          <div id="hz432Bar" style="height:100%;background:linear-gradient(90deg,#00d2d3,#54a0ff,#a55eea);width:0%;box-shadow:0 0 10px rgba(0,210,211,0.6);transition:width 0.4s ease;"></div>
+        </div>
+        <span id="hz432Status" style="font-size:11px;font-weight:800;color:var(--dim);font-family:monospace;flex-shrink:0;">OFF</span>
       </div>
-      <!-- Web Learning from chanlun.com -->
-      <div style="background:rgba(168,85,247,0.06);border:1px solid rgba(168,85,247,0.2);border-radius:6px;padding:8px 10px;margin-top:6px;">
-        <div style="font-size:10px;color:#a855f7;font-weight:700;margin-bottom:4px;letter-spacing:1px;">📚 chanlun.com 網路學習</div>
-        <div id="webLearningStatus" style="font-size:10px;color:var(--text);font-family:'JetBrains Mono',monospace;line-height:1.6;">載入中…</div>
-        <div id="webLearningArticle" style="font-size:10px;color:var(--dim);font-family:'JetBrains Mono',monospace;margin-top:4px;line-height:1.5;"></div>
+      <!-- 獎勵/厭惡 -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;position:relative;z-index:1;">
+        <div style="background:linear-gradient(135deg,rgba(46,213,115,0.1),rgba(46,213,115,0.02));border:1px solid rgba(46,213,115,0.25);border-radius:8px;padding:8px;text-align:center;position:relative;overflow:hidden;">
+          <div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,transparent,#2ed573,transparent);animation:glowLine 2s ease-in-out infinite;"></div>
+          <div style="font-size:10px;color:#2ed573;letter-spacing:3px;font-weight:700;margin-bottom:4px;">🏆 獎勵</div>
+          <div style="font-size:16px;font-weight:800;color:#2ed573;font-family:'JetBrains Mono',monospace;text-shadow:0 0 15px rgba(46,213,115,0.5);" id="pam11Spikes">--</div>
+        </div>
+        <div style="background:linear-gradient(135deg,rgba(255,107,107,0.1),rgba(255,107,107,0.02));border:1px solid rgba(255,107,107,0.25);border-radius:8px;padding:8px;text-align:center;position:relative;overflow:hidden;">
+          <div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,transparent,#ff6b6b,transparent);animation:glowLine 2s ease-in-out infinite;"></div>
+          <div style="font-size:10px;color:#ff6b6b;letter-spacing:3px;font-weight:700;margin-bottom:4px;">⚠️ 厭惡</div>
+          <div style="font-size:16px;font-weight:800;color:#ff6b6b;font-family:'JetBrains Mono',monospace;text-shadow:0 0 15px rgba(255,107,107,0.5);" id="ppl101Spikes">--</div>
+        </div>
       </div>
-      
+      <!-- 纏論學習 -->
+      <div style="background:linear-gradient(135deg,rgba(168,85,247,0.06),rgba(168,85,247,0.02));border:1px solid rgba(168,85,247,0.2);border-radius:8px;padding:10px;position:relative;z-index:1;">
+        <div style="font-size:10px;color:#a855f7;letter-spacing:3px;font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:4px;">📚 纏論學習</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;text-align:center;">
+          <div style="background:rgba(0,0,0,0.2);border-radius:4px;padding:5px;"><div style="font-size:8px;color:var(--dim);letter-spacing:1px;">時間</div><div id="chanStudyTime" style="font-size:10px;font-weight:700;color:var(--text);font-family:monospace;">--</div></div>
+          <div style="background:rgba(0,0,0,0.2);border-radius:4px;padding:5px;"><div style="font-size:8px;color:var(--dim);letter-spacing:1px;">理論</div><div id="chanAvgLevel" style="font-size:10px;font-weight:700;color:#4dd0e1;font-family:monospace;">--%</div></div>
+          <div style="background:rgba(0,0,0,0.2);border-radius:4px;padding:5px;"><div style="font-size:8px;color:var(--dim);letter-spacing:1px;">實戰</div><div id="practicalAvg" style="font-size:10px;font-weight:700;color:#ffc107;font-family:monospace;">--%</div></div>
+          <div style="background:rgba(0,0,0,0.2);border-radius:4px;padding:5px;"><div style="font-size:8px;color:var(--dim);letter-spacing:1px;">勝率</div><div id="tradeWinRate" style="font-size:10px;font-weight:700;color:#2ed573;font-family:monospace;">--%</div></div>
+          <div style="background:rgba(0,0,0,0.2);border-radius:4px;padding:5px;"><div style="font-size:8px;color:var(--dim);letter-spacing:1px;">買點</div><div id="buyConf" style="font-size:10px;font-weight:700;color:#2ed573;font-family:monospace;">--%</div></div>
+          <div style="background:rgba(0,0,0,0.2);border-radius:4px;padding:5px;"><div style="font-size:8px;color:var(--dim);letter-spacing:1px;">賣點</div><div id="sellConf" style="font-size:10px;font-weight:700;color:#ff6b6b;font-family:monospace;">--%</div></div>
+        </div>
+      </div>
+      <!-- 進階學習 -->
+      <div style="background:linear-gradient(135deg,rgba(0,210,211,0.05),rgba(0,210,211,0.02));border:1px solid rgba(0,210,211,0.15);border-radius:8px;padding:10px;position:relative;z-index:1;">
+        <div style="font-size:10px;color:#00d2d3;letter-spacing:3px;font-weight:700;margin-bottom:6px;">🧠 進階學習</div>
+        <div id="advKnowledge" style="font-size:10px;color:var(--text);font-family:'JetBrains Mono',monospace;line-height:1.7;">載入中…</div>
+        <div id="advReviews" style="font-size:9px;color:var(--dim);font-family:'JetBrains Mono',monospace;margin-top:5px;"></div>
+        <div id="advLessons" style="font-size:9px;color:#ffa502;font-family:'JetBrains Mono',monospace;margin-top:5px;"></div>
+      </div>
+      <!-- 網路學習 -->
+      <div style="background:linear-gradient(135deg,rgba(168,85,247,0.05),rgba(168,85,247,0.02));border:1px solid rgba(168,85,247,0.15);border-radius:8px;padding:10px;position:relative;z-index:1;">
+        <div style="font-size:10px;color:#a855f7;letter-spacing:3px;font-weight:700;margin-bottom:6px;">🌐 chanlun.com</div>
+        <div id="webLearningStatus" style="font-size:10px;color:var(--text);font-family:'JetBrains Mono',monospace;line-height:1.7;">載入中…</div>
+        <div id="webLearningArticle" style="font-size:9px;color:var(--dim);font-family:'JetBrains Mono',monospace;margin-top:5px;line-height:1.6;"></div>
+      </div>
     </div>
   </div>
 </div><!-- /row1 -->
@@ -1238,6 +1408,7 @@ function applySettings() {
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+<script src="fly_brain_3d.js"></script>
 <!-- fly_brain_3d.js removed - using Swat iframe instead -->
 
 <script>
@@ -3036,18 +3207,6 @@ function updatePnL(meta, simEquity, initial) {
     pnlBox.classList.remove('pnl-profit', 'pnl-loss');
     pnlBox.classList.add(totalPnl >= 0 ? 'pnl-profit' : 'pnl-loss');
 
-  // 市場情緒指標
-  const sentiment = latest.market_sentiment || (latest.observation && latest.observation.market_sentiment);
-  if (sentiment) {
-    const sLabel = document.getElementById("sentimentLabel");
-    const sFng = document.getElementById("sentimentFng");
-    const sBar = document.getElementById("sentimentBar");
-    const sThresh = document.getElementById("sentimentThreshold");
-    if (sLabel) { sLabel.textContent = sentiment.label || "--"; sLabel.style.color = sentiment.score > 0.3 ? "#2ed573" : sentiment.score < -0.3 ? "#ff6b6b" : "#fed330"; }
-    if (sFng) sFng.textContent = "FNG:" + (sentiment.fng_value || "--") + "(" + (sentiment.fng_class || "--") + ")";
-    if (sBar) sBar.style.width = ((sentiment.fng_value || 50)) + "%";
-    if (sThresh) sThresh.textContent = "買入門檻:" + (sentiment.buy_threshold || "--") + "%";
-  }
   }
 
   // 果蠅和無腦的總盈虧（nbRealized已在上方宣告）
@@ -3104,6 +3263,58 @@ function updateUI() {
   const latest = state.latest || {};
   const meta = state.meta || {};
   const neural = latest.neural || {};
+  // 市場情緒指標
+  try {
+    const sentiment = latest.market_sentiment || (latest.observation && latest.observation.market_sentiment);
+    if (sentiment) {
+      const sLabel = document.getElementById("sentimentLabel");
+      const sFng = document.getElementById("sentimentFng");
+      const sBar = document.getElementById("sentimentBar");
+      const sThresh = document.getElementById("sentimentThreshold");
+      if (sLabel) { sLabel.textContent = sentiment.label || "--"; sLabel.style.color = sentiment.score > 0.3 ? "#2ed573" : sentiment.score < -0.3 ? "#ff6b6b" : "#fed330"; }
+      if (sFng) sFng.textContent = "FNG:" + (sentiment.fng_value || "--") + "(" + (sentiment.fng_class || "--") + ")";
+      if (sBar) sBar.style.width = ((sentiment.fng_value || 50)) + "%";
+      if (sThresh) sThresh.textContent = "買入門檻:" + (sentiment.buy_threshold || "--") + "%";
+    // 果蠅情緒
+    const flyEmo = sentiment.fly_emotion;
+    if (flyEmo) {
+      const fe = document.getElementById("flyEmotion");
+      const fed = document.getElementById("flyEmotionDetail");
+      if (fe) { fe.textContent = flyEmo.emotion || "--"; fe.style.color = flyEmo.score > 0.2 ? "#2ed573" : flyEmo.score < -0.2 ? "#ff6b6b" : "#fed330"; }
+      if (fed) fed.textContent = flyEmo.detail || "";
+    }
+    // 市場新聞
+    const headlines = sentiment.headlines || [];
+    checkNewsUpdate(headlines);
+    const nh = document.getElementById("newsHeadlines");
+    if (nh && headlines.length > 0) {
+      // 新聞統計
+      const bullCount = headlines.filter(h => h.tag === "看漲").length;
+      const bearCount = headlines.filter(h => h.tag === "看跌").length;
+      const neutralCount = headlines.filter(h => h.tag === "中性").length;
+      const statsEl = document.getElementById("newsStats");
+      if (statsEl) statsEl.innerHTML = `📊 <span style="color:#2ed573;">看漲 ${bullCount}</span> · <span style="color:#ff6b6b;">看跌 ${bearCount}</span> · <span style="color:#a4b0be;">中性 ${neutralCount}</span>`;
+      const timeEl = document.getElementById("newsUpdateTime");
+      if (timeEl) timeEl.textContent = "更新於 " + new Date().toLocaleTimeString("zh-TW", {hour:"2-digit",minute:"2-digit"});
+      nh.innerHTML = headlines.map((h, i) => {
+        const color = h.tag === "看漲" ? "#2ed573" : h.tag === "看跌" ? "#ff6b6b" : "#a4b0be";
+        const dt = h.title_zh || h.title;
+        const textLower = (dt + " " + (h.title||"")).toLowerCase();
+        let impTag = "";
+        let impColor = "#888";
+        if (/bitcoin|btc|比特幣|ethereum|eth|以太幣/.test(textLower)) { impTag = "🔥主流"; impColor = "#f39c12"; }
+        else if (/etf|sec|fed|美聯儲|監管|政策|禁止|禁令/.test(textLower)) { impTag = "🏛️政策"; impColor = "#e74c3c"; }
+        else if (/hack|駭客|漏洞|盜|破產|崩盤/.test(textLower)) { impTag = "⚠️風險"; impColor = "#e74c3c"; }
+        else if (/合作|夥伴|採用|機構|上市/.test(textLower)) { impTag = "📈利好"; impColor = "#2ed573"; }
+        else if (/技術|升級|區塊鏈|智能合約|defi|nft/.test(textLower)) { impTag = "💡技術"; impColor = "#4dd0e1"; }
+        else { impTag = "📰一般"; impColor = "#7f8c8d"; }
+        return `<a href="${h.url}" target="_blank" class="news-item" title="${dt}" style="text-decoration:none;display:block;"><span style="font-size:13px;color:${color};background:rgba(255,255,255,0.03);padding:3px 8px;border-radius:3px;border:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;gap:6px;"><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">[${h.time}] [${h.tag}] ${dt}</span><span style="flex-shrink:0;font-size:11px;color:${impColor};background:rgba(255,255,255,0.05);padding:1px 5px;border-radius:2px;">${impTag}</span></span></a>`;
+      }).join("");
+      
+      
+    }
+    }
+  } catch(e) {}
 
   // Header
   document.getElementById('stepNum').textContent = latest.tick || meta.tick || 0;
@@ -3263,7 +3474,7 @@ function updateUI() {
   const _brainMs = neural.brain_ms || 0;
   const _tick = latest.tick || meta.tick || 1;
   const _avgMs = _brainMs / _tick;
-  document.getElementById('m3').innerHTML = (neural.total_spikes||0).toLocaleString() + ' spikes · ' + _brainMs.toFixed(0) + 'ms累積<br>平均 ' + _avgMs.toFixed(0) + ' ms/步';
+  document.getElementById('m3').textContent = (neural.total_spikes||0).toLocaleString() + ' spk';
   const side4 = neural.side || 'HOLD';
   const m4el = document.getElementById('m4');
   m4el.textContent = side4 === 'BUY' ? '買 BUY' : side4 === 'SELL' ? '賣 SELL' : '持有 HOLD';
@@ -3302,13 +3513,13 @@ function updateUI() {
 
   // Flow highlight - active step based on pipeline phase
   if (state.latest && state.latest.wall_time) { const bms = state.latest.neural ? state.latest.neural.brain_ms : 0; onTickReceived(state.latest.wall_time, bms); }
-  document.querySelectorAll('.flow-card').forEach(c => c.classList.remove('active'));
+  document.querySelectorAll('.jp-step').forEach(c => c.classList.remove('active'));
   let activeStep = 1;
   if (neural.total_spikes > 0) activeStep = 3;
   if (neural.side) activeStep = 4;
   if (exec5.status) activeStep = 5;
   if (stim6 !== 'none') activeStep = 6;
-  const activeCard = document.querySelector(`.flow-card[data-step="${activeStep}"]`);
+  const activeCard = document.querySelector(`.jp-step[data-step="${activeStep}"]`);
   if (activeCard) activeCard.classList.add('active');
 
   // Event log + P&L summary (update every time for real-time sync)
@@ -3742,19 +3953,9 @@ const PHASE_WEIGHTS = [0.05, 0.05, 0.55, 0.08, 0.12, 0.15];
 const PHASE_LABELS = ['數據擷取', '視覺編碼', '神經運算中', '決策解碼', '風控執行', '多巴胺學習'];
 
 function setFlyAtStep(step) {
-  document.querySelectorAll('.flow-card').forEach(c => {
-    c.classList.remove('walking');
-    const oldFly = c.querySelector('.fly-indicator');
-    if (oldFly) oldFly.remove();
-  });
-  const card = document.querySelector(`.flow-card[data-step="${step}"]`);
-  if (card) {
-    card.classList.add('walking');
-    const fly = document.createElement('span');
-    fly.className = 'fly-indicator';
-    fly.textContent = '\u{1FAB0}';
-    card.appendChild(fly);
-  }
+  document.querySelectorAll('.jp-step').forEach(c => c.classList.remove('walking'));
+  const card = document.querySelector(`.jp-step[data-step="${step}"]`);
+  if (card) card.classList.add('walking');
 }
 
 function getPhaseAtTime(elapsed) {
@@ -4211,5 +4412,9 @@ function minimizeFlyGame() {
   document.addEventListener('mouseup', () => { isDragging = false; });
 })();
 </script>
+
+<audio id="newsAlertSound" preload="auto">
+  <source src="/static/news_alert.mp3" type="audio/mpeg">
+</audio>
 </body>
 </html>

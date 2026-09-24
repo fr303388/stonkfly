@@ -235,6 +235,28 @@ def api_fractal_notify():
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)})
 
+# 靜態檔案服務（音效等）
+@app.route("/static/<path:filename>")
+def static_files(filename):
+    static_dir = Path(__file__).parent / "static"
+    return send_from_directory(str(static_dir), filename)
+
+# 新聞音效開關
+@app.route("/api/news_sound/toggle", methods=["POST"])
+def api_news_sound_toggle():
+    try:
+        data = request.get_json(force=True)
+        enabled = data.get("enabled", True)
+        try:
+            from stonkfly.telegram_notify import send_telegram
+            status = "🔔 開啟" if enabled else "🔕 關閉"
+            send_telegram(f"{status} 新聞更新音效\n新聞有更新時將{'播放提示音' if enabled else '靜音'}")
+        except Exception:
+            pass
+        return jsonify({"ok": True, "enabled": enabled})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
+
 @app.route("/api/telegram/reset", methods=["POST"])
 def api_telegram_reset():
     import os

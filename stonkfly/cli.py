@@ -592,6 +592,14 @@ def main():
             if chan_strategy is not None and chan_result is not None:
                 fly_natural_side = neural.get("side", "HOLD")
                 chan_sig = chan_result.get("signal", "HOLD")
+                # 更新果蠅情緒（用神經數據+盈虧）
+                try:
+                    from .market_sentiment import compute_fly_emotion
+                    _fly_pnl = float(neural.get("unrealized_pnl", 0) or 0) + float(neural.get("pnl", 0) or 0)
+                    if _market_sentiment:
+                        _market_sentiment["fly_emotion"] = compute_fly_emotion(neural, _fly_pnl)
+                except Exception:
+                    pass
                 # 下跌趨勢：只在RSI<30超賣時考慮小倉反彈，且TP改為3%
                 if _is_downtrend and chan_sig == "BUY" and rsi_latest > 30:
                     chan_sig = "HOLD"  # RSI不夠低，不接飛刀
