@@ -27,6 +27,9 @@ COOLDOWN_AFTER_TRADE = 300  # 交易後冷卻5分鐘
 TELEGRAM_NOTIFY_DEFAULT = os.environ.get("TELEGRAM_NOTIFY_FRACTAL", "true").lower() == "true"
 RSI_OVERSOLD = 35  # RSI低於此值才考慮買入
 RSI_OVERBOUGHT = 65  # RSI高於此值才考慮賣出
+VOLUME_SURGE_RATIO = 1.2  # 成交量放大倍數（超過平均20%才算放量）
+MULTI_TIMEFRAME_CONFIRM = True  # 多時間框共振確認
+BTC_MARKET_FILTER = True  # BTC市場過濾器（BTC下跌時不買入）
 
 
 def _load_env():
@@ -130,6 +133,41 @@ def detect_trend(klines: list, period: int = 20) -> str:
     elif short_ma < long_ma * 0.995:
         return "downtrend"
     return "neutral"
+
+
+def calc_avg_volume(klines: list, period: int = 20) -> float:
+    """計算最近period根K線的平均成交量"""
+    if len(klines) < 5:
+        return 0
+    recent = klines[-min(period, len(klines)):]
+    return sum(k["volume"] for k in recent) / len(recent)
+
+
+def get_fractal_volume(fractal: dict, klines: list) -> float:
+    """取得分型K線的成交量"""
+    if not fractal or "index" not in fractal:
+        return 0
+    idx = fractal["index"]
+    if 0 <= idx < len(klines):
+        return klines[idx]["volume"]
+    return 0
+
+
+# BTC趨勢快取（避免每個幣種都重複抓取）
+_btc_trend_cache = {"trend": "neutral", "timestamp": 0}
+
+def get_btc_trend() -> str:
+    """取得BTC趨勢（快取60秒）"""
+    now = time.time()
+    if now - _btc_trend_cache["timestamp"] < 60:
+        return _btc_trend_cache["trend"]
+    klines = fetch_klines("BTCUSDT", "5m", 50)
+    if len(klines) < 20:
+        _btc_trend_cache["trend"] = "neutral"
+    else:
+        _btc_trend_cache["trend"] = detect_trend(klines)
+    _btc_trend_cache["timestamp"] = now
+    return _btc_trend_cache["trend"]
 
 
 def calc_percentile(klines: list, period: int = 50) -> float:
@@ -299,10 +337,49 @@ def run_cycle():
 
         sym_state["last_fractal_time"] = fractal["time"]
 
-        # 底分型 → 買入（底分型 + RSI過濾 + 趨勢判斷）
+        # 底分型 → 買入（底分型 + RSI過濾 + 趨勢判斷 + 多時間框 + 成交量 + BTC過濾）
         if fractal["type"] == "bottom" and sym_state["position"] == 0:
             trend = detect_trend(klines)
             percentile = calc_percentile(klines)
+
+            # === BTC市場過濾器：BTC下跌趨勢時不買入 ===
+            if BTC_MARKET_FILTER:
+                btc_trend = get_btc_trend()
+                if btc_trend == "downtrend":
+                    sym_state["last_action"] = f"BTC下跌趨勢 暫停買入"
+                    sym_state["activity_log"].append({"time": now_ts, "msg": f"BTC下跌趨勢 暫停買入"})
+                    if len(sym_state["activity_log"]) > 10:
+                        sym_state["activity_log"] = sym_state["activity_log"][-10:]
+                    continue
+
+            # === 成交量確認：底分型需放量 ===
+            avg_vol = calc_avg_volume(klines)
+            fractal_vol = get_fractal_volume(fractal, klines)
+            if avg_vol > 0 and fractal_vol < avg_vol * VOLUME_SURGE_RATIO:
+                vol_ratio = fractal_vol / avg_vol if avg_vol > 0 else 0
+                sym_state["last_action"] = f"底分型縮量({vol_ratio:.1f}x) 跳過"
+                sym_state["activity_log"].append({"time": now_ts, "msg": f"底分型縮量({vol_ratio:.1f}x) 跳過"})
+                if len(sym_state["activity_log"]) > 10:
+                    sym_state["activity_log"] = sym_state["activity_log"][-10:]
+                continue
+
+            # === 多時間框共振：15分K需在低位 ===
+            h15_confirm = True
+            h15_rsi = 50
+            if MULTI_TIMEFRAME_CONFIRM:
+                klines_15m = fetch_klines(sym, "15m", 50)
+                if len(klines_15m) >= 20:
+                    h15_rsi = calc_rsi(klines_15m)
+                    h15_trend = detect_trend(klines_15m)
+                    # 15分K在低位（RSI<55）或上漲趨勢才確認
+                    if h15_rsi > 55 and h15_trend != "uptrend":
+                        h15_confirm = False
+                if not h15_confirm:
+                    sym_state["last_action"] = f"15分K RSI{h15_rsi:.0f}過高 跳過"
+                    sym_state["activity_log"].append({"time": now_ts, "msg": f"15分K RSI{h15_rsi:.0f}過高 跳過"})
+                    if len(sym_state["activity_log"]) > 10:
+                        sym_state["activity_log"] = sym_state["activity_log"][-10:]
+                    continue
             # 趨勢感知RSI過濾
             if trend == "uptrend":
                 rsi_limit = 65  # 上漲趨勢回調即可買
@@ -333,7 +410,7 @@ def run_cycle():
                 trade = {
                     "time": now_ts, "side": "BUY", "price": current_price,
                     "qty": qty, "amount": buy_amount,
-                    "reason": f"底分型+RSI{rsi:.0f}+{trend}",
+                    "reason": f"底分型+RSI{rsi:.0f}+{trend}+放量{vol_ratio:.1f}x+15mRSI{h15_rsi:.0f}",
                     "pnl": 0,
                 }
                 sym_state["last_action"] = f"✅ 買入 ${current_price:.2f}"
@@ -347,14 +424,26 @@ def run_cycle():
                        f"💰 價格: {fmt_price(current_price)}\n"
                        f"💵 金額: ${buy_amount:,.2f}\n"
                        f"📦 數量: {qty:.6f}\n"
-                       f"📝 底分型 + RSI {rsi:.1f} + {trend}")
+                       f"📝 底分型 + RSI {rsi:.1f} + {trend}\n"
+                       f"📊 放量 {vol_ratio:.1f}x | 15m RSI {h15_rsi:.0f}")
                 if notify_enabled:
                     send_telegram(msg)
                 print(f"[{sym}] 買入 @ ${current_price:.4f} RSI={rsi:.1f}")
 
-        # 頂分型 → 賣出（頂分型 + RSI）
+        # 頂分型 → 賣出（頂分型 + RSI + 成交量確認）
         elif fractal["type"] == "top" and sym_state["position"] > 0:
             unrealized = (current_price - sym_state["avg_entry"]) * sym_state["position"]
+
+            # === 成交量確認：頂分型需放量 ===
+            avg_vol = calc_avg_volume(klines)
+            fractal_vol = get_fractal_volume(fractal, klines)
+            vol_ratio = fractal_vol / avg_vol if avg_vol > 0 else 0
+            if avg_vol > 0 and fractal_vol < avg_vol * VOLUME_SURGE_RATIO:
+                sym_state["last_action"] = f"頂分型縮量({vol_ratio:.1f}x) 續抱"
+                sym_state["activity_log"].append({"time": now_ts, "msg": f"頂分型縮量({vol_ratio:.1f}x) 續抱"})
+                if len(sym_state["activity_log"]) > 10:
+                    sym_state["activity_log"] = sym_state["activity_log"][-10:]
+                continue
             # 虧損時不因頂分型賣出
             if unrealized < 0:
                 sym_state["last_action"] = f"頂分型但虧損{unrealized:+.1f}"
@@ -401,7 +490,7 @@ def run_cycle():
                    f"💰 價格: {fmt_price(current_price)}\n"
                    f"💵 金額: ${sell_amount:,.2f}\n"
                    f"{pnl_emoji} 盈虧: {'+' if pnl > 0 else ''}${pnl:,.4f}\n"
-                   f"📝 頂分型 + RSI {rsi:.1f}")
+                   f"📝 頂分型 + RSI {rsi:.1f} + 放量 {vol_ratio:.1f}x")
             if notify_enabled:
                 send_telegram(msg)
             print(f"[{sym}] 賣出 @ ${current_price:.4f} PnL: ${pnl:.4f} RSI={rsi:.1f}")
@@ -456,7 +545,7 @@ def get_summary() -> dict:
 
 if __name__ == "__main__":
     print("分型機器人啟動（暖機模式），每60秒檢查一次，Telegram通知:", "開啟" if TELEGRAM_NOTIFY_DEFAULT else "關閉")
-    print("規則：只交易啟動後新形成的分型 + RSI過濾 + 5分鐘冷卻")
+    print("規則：分型 + RSI過濾 + 多時間框共振 + 成交量確認 + BTC過濾 + 5分鐘冷卻")
     _init_state = load_state()
     if _init_state.get("notify_enabled", TELEGRAM_NOTIFY_DEFAULT):
         send_telegram("⚙️ <b>分型機器人啟動</b>\n模擬交易 7 個幣種\n暖機後只交易新分型 + RSI過濾")

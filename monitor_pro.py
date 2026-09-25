@@ -235,6 +235,30 @@ def api_fractal_notify():
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)})
 
+@app.route("/api/market_scan", methods=["GET"])
+def api_market_scan():
+    """市場掃描：強勢幣和埋伏幣排行榜"""
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent.resolve()))
+    try:
+        from stonkfly.market_scanner import get_scan_result
+        result = get_scan_result()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"strong": [], "potential": [], "error": str(e)})
+
+@app.route("/api/market_scan/refresh", methods=["POST"])
+def api_market_scan_refresh():
+    """強制重新掃描市場"""
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent.resolve()))
+    try:
+        from stonkfly.market_scanner import scan_market
+        result = scan_market()
+        return jsonify({"ok": True, **result})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
+
 # 靜態檔案服務（音效等）
 @app.route("/static/<path:filename>")
 def static_files(filename):

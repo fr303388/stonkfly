@@ -1115,7 +1115,8 @@ function applySettings() {
     <div id="sentimentBar" style="height:100%;width:50%;background:linear-gradient(90deg,#ff6b6b,#fed330,#2ed573);transition:width 0.5s;"></div>
   </div>
   <span id="sentimentThreshold" style="font-size:10px;color:var(--dim);font-family:monospace;">買入門檻:--</span>
-  <span style="margin-left:auto;font-size:11px;color:var(--dim);letter-spacing:1px;" title="已實現+未實現">分型總盈虧</span>
+  <span onclick="toggleMarketScan()" style="margin-left:auto;font-size:10px;color:#ff9f43;cursor:pointer;font-weight:700;letter-spacing:1px;padding:2px 8px;border:1px solid #ff9f43;border-radius:3px;">🔥 強勢幣 / 💎 埋伏幣</span><a href="http://127.0.0.1:8770" target="_blank" style="font-size:10px;color:#f0b423;font-weight:700;letter-spacing:1px;padding:2px 8px;border:1px solid #f0b423;border-radius:3px;text-decoration:none;margin-left:6px;">🚀 Solana迷因幣雷達 ↗</a>
+  <span style="font-size:11px;color:var(--dim);letter-spacing:1px;" title="已實現+未實現">分型總盈虧</span>
   <span id="fractalTotalPnl" style="font-size:18px;font-weight:900;font-family:'JetBrains Mono',monospace;">--</span>
 </div>
 <!-- 步驟小卡(左1/3) + 新聞(右2/3) -->
@@ -4424,5 +4425,108 @@ function minimizeFlyGame() {
 <audio id="newsAlertSound" preload="auto">
   <source src="/static/news_alert.mp3" type="audio/mpeg">
 </audio>
+<!-- 市場掃描浮動面板 -->
+<div id="marketScanPanel" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:90%;max-width:900px;max-height:80vh;background:#0d0d0d;border:1px solid #ff9f43;border-radius:8px;z-index:10000;overflow:hidden;box-shadow:0 0 40px rgba(255,159,67,0.3);">
+  <div style="padding:12px 16px;background:linear-gradient(90deg,rgba(255,159,67,0.15),transparent);border-bottom:1px solid #333;display:flex;align-items:center;justify-content:space-between;">
+    <span style="font-size:14px;font-weight:800;color:#ff9f43;">🔥 強勢幣 / 💎 埋伏幣 掃描器</span>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span id="marketScanTime" style="font-size:10px;color:#888;">--</span>
+      <button onclick="refreshMarketScan()" style="background:#222;color:#ff9f43;border:1px solid #ff9f43;padding:3px 10px;border-radius:3px;cursor:pointer;font-size:11px;">重新掃描</button>
+      <span onclick="toggleMarketScan()" style="cursor:pointer;color:#888;font-size:18px;">&times;</span>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;max-height:calc(80vh - 50px);overflow-y:auto;">
+    <div style="padding:12px;border-right:1px solid #222;">
+      <div style="font-size:12px;font-weight:700;color:#ff6b6b;margin-bottom:8px;">🔥 強勢幣 TOP 10（順勢跟進）</div>
+      <div id="strongCoinList" style="display:flex;flex-direction:column;gap:4px;"></div>
+    </div>
+    <div style="padding:12px;">
+      <div style="font-size:12px;font-weight:700;color:#2ed573;margin-bottom:8px;">💎 埋伏幣 TOP 10（提前佈局）</div>
+      <div id="potentialCoinList" style="display:flex;flex-direction:column;gap:4px;"></div>
+    </div>
+  </div>
+</div>
+<div id="marketScanOverlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:9999;" onclick="toggleMarketScan()"></div>
+
+<script>
+function toggleMarketScan() {
+  const panel = document.getElementById('marketScanPanel');
+  const overlay = document.getElementById('marketScanOverlay');
+  if (panel.style.display === 'none') {
+    panel.style.display = 'block';
+    overlay.style.display = 'block';
+    loadMarketScan();
+  } else {
+    panel.style.display = 'none';
+    overlay.style.display = 'none';
+  }
+}
+
+function fmtPrice(price) {
+  if (price >= 1000) return '$' + price.toLocaleString('en-US', {maximumFractionDigits:0});
+  if (price >= 100) return '$' + price.toFixed(2);
+  if (price >= 1) return '$' + price.toFixed(4);
+  return '$' + price.toFixed(8);
+}
+
+function loadMarketScan() {
+  fetch('/api/market_scan').then(r => r.json()).then(d => {
+    const strongList = document.getElementById('strongCoinList');
+    const potentialList = document.getElementById('potentialCoinList');
+    const scanTime = document.getElementById('marketScanTime');
+    
+    if (d.scanned_at) {
+      const t = new Date(d.scanned_at * 1000);
+      scanTime.textContent = '掃描時間: ' + t.toLocaleTimeString('zh-TW', {hour12:false});
+    }
+    
+    // 強勢幣
+    if (d.strong && d.strong.length > 0) {
+      strongList.innerHTML = d.strong.slice(0, 10).map((c, i) => `
+        <div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:rgba(255,107,107,0.05);border-radius:4px;border-left:3px solid #ff6b6b;">
+          <span style="font-size:11px;color:#666;width:16px;">${i+1}</span>
+          <span style="font-size:12px;font-weight:700;color:#fff;width:70px;">${c.symbol.replace('USDT','')}</span>
+          <span style="font-size:11px;color:#aaa;width:80px;font-family:monospace;">${fmtPrice(c.price)}</span>
+          <span style="font-size:11px;font-weight:700;width:55px;color:${c.change_24h >= 0 ? '#2ed573' : '#ff6b6b'};">${c.change_24h >= 0 ? '+' : ''}${c.change_24h.toFixed(1)}%</span>
+          <span style="font-size:10px;color:#ff9f43;margin-left:auto;font-weight:700;">${c.score}分</span>
+        </div>
+      `).join('');
+    } else {
+      strongList.innerHTML = '<div style="color:#666;text-align:center;padding:20px;">暫無強勢幣</div>';
+    }
+    
+    // 埋伏幣
+    if (d.potential && d.potential.length > 0) {
+      potentialList.innerHTML = d.potential.slice(0, 10).map((c, i) => `
+        <div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:rgba(46,213,115,0.05);border-radius:4px;border-left:3px solid #2ed573;">
+          <span style="font-size:11px;color:#666;width:16px;">${i+1}</span>
+          <span style="font-size:12px;font-weight:700;color:#fff;width:70px;">${c.symbol.replace('USDT','')}</span>
+          <span style="font-size:11px;color:#aaa;width:80px;font-family:monospace;">${fmtPrice(c.price)}</span>
+          <span style="font-size:11px;font-weight:700;width:55px;color:${c.change_24h >= 0 ? '#2ed573' : '#ff6b6b'};">${c.change_24h >= 0 ? '+' : ''}${c.change_24h.toFixed(1)}%</span>
+          <span style="font-size:10px;color:#2ed573;margin-left:auto;font-weight:700;">${c.score}分</span>
+        </div>
+      `).join('');
+    } else {
+      potentialList.innerHTML = '<div style="color:#666;text-align:center;padding:20px;">暫無埋伏幣</div>';
+    }
+  }).catch(e => {
+    document.getElementById('strongCoinList').innerHTML = '<div style="color:#ff6b6b;text-align:center;padding:20px;">載入失敗</div>';
+  });
+}
+
+function refreshMarketScan() {
+  const btn = event.target;
+  btn.textContent = '掃描中...';
+  btn.disabled = true;
+  fetch('/api/market_scan/refresh', {method: 'POST'}).then(r => r.json()).then(d => {
+    btn.textContent = '重新掃描';
+    btn.disabled = false;
+    loadMarketScan();
+  }).catch(() => {
+    btn.textContent = '重新掃描';
+    btn.disabled = false;
+  });
+}
+</script>
 </body>
 </html>

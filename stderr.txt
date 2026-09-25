@@ -1,0 +1,11 @@
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "C:\Users\ANGEL\Doubao\chats\2026-09-12\new-chat\stonkfly\stonkfly\cli.py", line 1041, in <module>
+    main()
+  File "C:\Users\ANGEL\Doubao\chats\2026-09-12\new-chat\stonkfly\stonkfly\cli.py", line 193, in main
+    ledger = Ledger(out / "ledger.sqlite", settings, "live" if a.live else "paper")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ANGEL\Doubao\chats\2026-09-12\new-chat\stonkfly\stonkfly\ledger.py", line 41, in __init__
+    raise RuntimeError(
+RuntimeError: Run settings/mode mismatch; use a separate paper run directory

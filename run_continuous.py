@@ -47,11 +47,11 @@ def run_batch(batch_num):
     env["PATH"] = MINGW_PATH + ";" + env.get("PATH", "")
 
     cmd = [
-        str(VENV_PYTHON), "-m", "stonkfly", "run",
-        "--fast", "--steps", str(STEPS),
-        "--products", "BTC-USDT", "--exchange", "binance",
-        "--neural-ms", "2000", "--hz432", "--strategy", "martingale",
-        "--chan-auto",
+        str(VENV_PYTHON), "-m", "stonkfly.cli", "run",
+        "--out", "runs/paper",
+        "--steps", str(STEPS),
+        "--products", "DOGE-USDT", "--exchange", "binance",
+        "--hz432", "--chan-auto",
     ]
 
     try:

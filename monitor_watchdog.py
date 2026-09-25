@@ -18,8 +18,8 @@ MONITOR = ROOT / "monitor_pro.py"
 RUN_CONTINUOUS = ROOT / "run_continuous.py"
 LATEST_JSON = ROOT / "runs" / "paper" / "latest.json"
 STATS_FILE = ROOT / "runs" / "paper" / "watchdog_stats.json"
-STALL_THRESHOLD = 360  # 6 minutes in seconds
-CHECK_INTERVAL = 30  # check every 30 seconds
+STALL_THRESHOLD = 120  # 2 minutes in seconds (faster response)
+CHECK_INTERVAL = 15  # check every 15 seconds
 
 
 def write_stats(restart_count, stall_restart_count, uptime_start):
@@ -39,44 +39,59 @@ def write_stats(restart_count, stall_restart_count, uptime_start):
 
 
 def kill_stonkfly_processes():
-    """Kill all stonkfly python processes except this watchdog."""
+    """Kill all stonkfly python processes except this watchdog using taskkill."""
     try:
-        import ctypes
-        kernel32 = ctypes.windll.kernel32
-        # Use taskkill to kill all stonkfly-related python processes
+        my_pid = os.getpid()
+        # Use taskkill to force kill all python.exe that are NOT this watchdog
+        # First get all python PIDs
         result = subprocess.run(
-            ["wmic", "process", "where",
-             "name='python.exe' and (commandline like '%stonkfly%' or commandline like '%run_continuous%' or commandline like '%monitor_pro%')",
-             "get", "processid"],
+            ["tasklist", "/FI", "IMAGENAME eq python.exe", "/FO", "CSV", "/NH"],
             capture_output=True, text=True
         )
-        pids = []
-        for line in result.stdout.strip().split('\n')[1:]:
-            line = line.strip()
-            if line and line.isdigit():
-                pid = int(line)
-                if pid != os.getpid():
-                    pids.append(pid)
-        for pid in pids:
+        pids_to_kill = []
+        for line in result.stdout.strip().split('\n'):
+            if '"python.exe"' in line:
+                parts = line.split('","')
+                if len(parts) >= 2:
+                    pid = int(parts[1].strip('"'))
+                    if pid != my_pid:
+                        pids_to_kill.append(pid)
+        print(f"  找到 {len(pids_to_kill)} 個 Python 進程需要終止")
+        # Force kill all
+        for pid in pids_to_kill:
             try:
-                os.kill(pid, signal.SIGTERM)
-                print(f"  已停止進程 PID {pid}")
+                subprocess.run(["taskkill", "/F", "/PID", str(pid)],
+                             capture_output=True, timeout=5)
             except Exception:
                 pass
-        time.sleep(3)
-        # Force kill any remaining
-        for pid in pids:
-            try:
-                os.kill(pid, signal.SIGKILL)
-            except Exception:
-                pass
-        # Clean lock file
-        lock_file = ROOT / "runs" / "paper" / "worker.lock"
-        if lock_file.exists():
-            try:
-                lock_file.unlink()
-            except Exception:
-                pass
+        time.sleep(5)
+        # Verify all killed
+        remaining = subprocess.run(
+            ["tasklist", "/FI", "IMAGENAME eq python.exe", "/FO", "CSV", "/NH"],
+            capture_output=True, text=True
+        )
+        remaining_count = 0
+        for line in remaining.stdout.strip().split('\n'):
+            if '"python.exe"' in line and str(my_pid) not in line:
+                remaining_count += 1
+        if remaining_count > 0:
+            print(f"  警告: 仍有 {remaining_count} 個進程未終止，重試")
+            time.sleep(3)
+            for pid in pids_to_kill:
+                try:
+                    subprocess.run(["taskkill", "/F", "/PID", str(pid)],
+                                 capture_output=True, timeout=5)
+                except Exception:
+                    pass
+        # Clean all lock files
+        for lock_name in ["worker.lock", "watchdog.lock"]:
+            lock_file = ROOT / "runs" / "paper" / lock_name
+            if lock_file.exists():
+                try:
+                    lock_file.unlink()
+                except Exception:
+                    pass
+        print("  進程清理完成")
     except Exception as e:
         print(f"  清理進程異常: {e}")
 
