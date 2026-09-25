@@ -1,0 +1,219 @@
+﻿<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>迷因幣雷達</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#0a0e14; color:#e6edf3; font-family:'Segoe UI',sans-serif; padding:16px; }
+h1 { font-size:20px; margin-bottom:12px; display:flex; align-items:center; gap:8px; }
+h1 .refresh { font-size:11px; color:#8b949e; font-weight:normal; margin-left:auto; }
+.portfolio { background:linear-gradient(135deg,#1a2332,#0d1117); border:1px solid #30363d; border-radius:10px; padding:14px; margin-bottom:14px; }
+.portfolio h2 { font-size:14px; color:#f0b429; margin-bottom:10px; }
+.pf-summary { display:flex; gap:20px; margin-bottom:10px; }
+.pf-stat { font-size:13px; }
+.pf-stat .lbl { color:#8b949e; font-size:11px; }
+.pf-stat .num { font-size:16px; font-weight:bold; }
+.pf-positions { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+.pf-pos { background:#161b22; border-radius:8px; padding:10px; }
+.pf-pos .sym { font-weight:bold; font-size:14px; }
+.pf-pos .detail { font-size:11px; color:#8b949e; margin-top:4px; }
+.pf-pos .pnl { font-size:16px; font-weight:bold; margin-top:4px; }
+.recommend { background:#161b22; border:1px solid #30363d; border-radius:10px; padding:14px; margin-bottom:14px; }
+.recommend h2 { font-size:14px; color:#58a6ff; margin-bottom:8px; }
+.rec-item { display:flex; align-items:center; gap:10px; padding:5px 0; border-bottom:1px solid #21262d; }
+.rec-item:last-child { border:none; }
+.rec-rank { font-size:16px; font-weight:bold; width:24px; }
+.rec-name { font-weight:bold; min-width:110px; }
+.rec-score { background:#21262d; padding:2px 8px; border-radius:4px; font-size:11px; }
+.rec-reasons { font-size:11px; color:#8b949e; flex:1; }
+table { width:100%; border-collapse:collapse; background:#161b22; border-radius:8px; overflow:hidden; margin-top:10px; }
+th { background:#21262d; padding:8px 10px; text-align:left; font-size:11px; color:#8b949e; }
+td { padding:8px 10px; border-top:1px solid #21262d; font-size:12px; }
+tr:hover { background:#1c2128; }
+.up { color:#3fb950; } .down { color:#f85149; }
+a { color:#58a6ff; text-decoration:none; } a:hover { text-decoration:underline; }
+</style>
+</head>
+<body>
+<h1>🚀 迷因幣雷達 <span class="refresh" id="refresh">--</span></h1>
+
+<div class="portfolio">
+  <h2>💰 模擬組合（本金$1000 · 每筆$100）</h2>
+  <div class="pf-summary">
+    <div class="pf-stat"><div class="lbl">投入</div><div class="num" id="pfInvested">--</div></div>
+    <div class="pf-stat"><div class="lbl">現值</div><div class="num" id="pfValue">--</div></div>
+    <div class="pf-stat"><div class="lbl">總盈虧</div><div class="num" id="pfPnl">--</div></div>
+    <div class="pf-stat"><div class="lbl">總資產($1000起)</div><div class="num" id="pfAllPnl">--</div></div>
+  </div>
+  <div class="pf-positions" id="pfPositions"></div>
+</div>
+  <div style="margin-top:12px;border-top:1px solid #30363d;padding-top:8px;">
+    <div style="font-size:12px;color:#8b949e;margin-bottom:6px;">📋 買賣紀錄</div>
+    <div id="pfTrades" style="max-height:150px;overflow-y:auto;font-size:11px;"></div>
+  </div>
+
+<div class="recommend">
+  <h2>🎯 即時推薦</h2>
+  <div id="recommend"></div>
+</div>
+
+<div class="recommend" style="border-color:#f0b42944">
+  <h2 style="color:#f0b429">🌱 潛力新股（買盤進入中，還沒噴發）</h2>
+  <div id="potential"></div>
+</div>
+
+<div class="recommend" style="border-color:#a371f744">
+  <h2 style="color:#a371f7">📱 X 社群熱門（CoinGecko Trending）</h2>
+  <div id="trending" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+</div>
+
+<table>
+<thead><tr><th>評分</th><th>幣種</th><th>名稱</th><th>價格</th><th>1h</th><th>24h</th><th>量</th><th>分析</th></tr></thead>
+<tbody id="tbody"></tbody>
+</table>
+
+<audio id="alertSound" src="/alert.mp3"></audio>
+<script>
+// 瀏覽器自動播放限制：首次點擊解鎖聲音
+let audioUnlocked = false;
+function unlockAudio() {
+  if (audioUnlocked) return;
+  const a = document.getElementById('alertSound');
+  a.volume = 0.5;
+  a.play().then(() => { a.pause(); a.currentTime = 0; audioUnlocked = true; }).catch(()=>{});
+}
+document.addEventListener('click', unlockAudio, {once: false});
+document.addEventListener('keydown', unlockAudio);
+</script>
+<script>
+let seenSymbols = new Set();
+async function load() {
+  try {
+    const r = await fetch('/api/dex');
+    const d = await r.json();
+    document.getElementById('refresh').textContent = '更新於 ' + d.scanned_at;
+    const pf = d.portfolio || {};
+    pf.total_invested = pf.total_invested || 0;
+    pf.total_value = pf.total_value || 0;
+    pf.total_pnl = pf.total_pnl || 0;
+    pf.total_pnl_pct = pf.total_pnl_pct || 0;
+    pf.total_equity = pf.total_equity || 0;
+    pf.all_time_pnl = pf.all_time_pnl || 0;
+    pf.all_time_pnl_pct = pf.all_time_pnl_pct || 0;
+    pf.positions = pf.positions || [];
+    pf.trades = pf.trades || [];
+    const recTrack = d.rec_tracker || {};
+    
+    // 組合摘要
+    document.getElementById('pfInvested').textContent = '$' + pf.total_invested;
+    const pnlEl = document.getElementById('pfPnl');
+    pnlEl.textContent = (pf.total_pnl>=0?'+':'') + '$' + pf.total_pnl.toFixed(2) + ' (' + (pf.total_pnl_pct>=0?'+':'') + (pf.total_pnl_pct||0) + '%)';
+    pnlEl.className = 'num ' + (pf.total_pnl>=0?'up':'down');
+    const allPnlEl = document.getElementById('pfAllPnl');
+    allPnlEl.textContent = '$' + pf.total_equity.toFixed(2) + ' (' + (pf.all_time_pnl>=0?'+':'') + pf.all_time_pnl.toFixed(0) + ')';
+    allPnlEl.className = 'num ' + (pf.all_time_pnl>=0?'up':'down');
+    document.getElementById('pfValue').textContent = '$' + pf.total_value.toFixed(2);
+    
+    // 持倉
+    document.getElementById('pfPositions').innerHTML = pf.positions.map(p=>{
+      const pnlCls = p.pnl>=0?'up':'down';
+      const img = p.image ? `<img src="${p.image}" style="width:40px;height:40px;border-radius:50%;flex-shrink:0" onerror="this.style.display='none'">` : '<div style="width:40px;height:40px;border-radius:50%;background:#21262d;flex-shrink:0"></div>';
+      return `<div class="pf-pos" style="display:flex;align-items:center;gap:10px">
+        ${img}
+        <div style="flex:1">
+          <div class="sym"><a href="${p.url}" target="_blank">${p.symbol}</a></div>
+          <div class="detail">買入 $${(p.buy_price||0).toFixed(8)} | 現價 $${(p.current_price||0).toFixed(8)}</div>
+          <div class="pnl ${pnlCls}">${p.pnl>=0?'+':''}$${(p.pnl||0).toFixed(2)} (${(p.pnl_pct||0)>=0?'+':''}${(p.pnl_pct||0)}%)</div>
+        </div>
+      </div>`;
+    }).join('');
+
+    // 買賣紀錄
+    const trades = (pf.trades||[]).slice(-20).reverse();
+    document.getElementById("pfTrades").innerHTML = trades.length ? trades.map(t=>{
+      const cls = t.action==="BUY"?"up":"down";
+      const pnlStr = t.action==="SELL" ? `<span class="${t.pnl>=0?"up":"down"}">${t.pnl>=0?"+":""}$${t.pnl} (${t.pnl_pct>=0?"+":""}${t.pnl_pct}%)</span>` : `<span style="color:#8b949e">持有中</span>`;
+      return `<div style="padding:3px 0;border-bottom:1px solid #21262d;display:flex;gap:8px;align-items:center">
+        <span style="color:#666">${t.time}</span>
+        <span class="${cls}" style="font-weight:bold">${t.action}</span>
+        <span>${t.symbol}</span>
+        <span style="color:#8b949e">@ $${((t.action==="BUY"?t.buy_price:t.sell_price)||0).toFixed(8)}</span>
+        ${pnlStr}
+        <span style="color:#666;margin-left:auto">${t.reason||""}</span>
+      </div>`;
+    }).join("") : "<div style='color:#666'>尚無交易紀錄</div>";
+    // 推薦
+    document.getElementById('recommend').innerHTML = d.tokens.filter(t=>t.score>=4).slice(0,5).map((t,i)=>{
+      const img = t.image ? `<img src="${t.image}" style="width:24px;height:24px;border-radius:50%;flex-shrink:0" onerror="this.style.display='none'">` : '';
+      return `<div class="rec-item" style="display:flex;align-items:center;gap:6px">
+        <span class="rec-rank" style="color:#f0b429">#${i+1}</span>
+        ${img}
+        <span class="rec-name"><a href="${t.url}" target="_blank">${t.symbol}</a></span>
+        <span class="rec-score">${t.score}分</span>
+        <span class="rec-reasons">${t.reasons.join(' · ')}</span>
+${recTrack[t.symbol] ? `<span class="${(recTrack[t.symbol].pnl||0)>=0?"up":"down"}" style="font-weight:bold">餘額 $${(100*(1+(recTrack[t.symbol].pnl||0)/100)).toFixed(2)} (${(recTrack[t.symbol].pnl||0)>=0?"+":""}${(recTrack[t.symbol].pnl||0)}%)</span>` : ""}
+        <span class="${t.change_24h>=0?'up':'down'}">${t.change_24h>=0?'+':''}${t.change_24h}%</span>
+      </div>`;
+    }).join('') || '<div style="color:#8b949e;font-size:12px">目前沒有強推薦</div>';
+
+    // 潛力新股
+    document.getElementById('potential').innerHTML = (d.potential||[]).map(t=>{
+      const p = t.price<0.0001 ? '$'+t.price.toFixed(8) : t.price<0.01 ? '$'+t.price.toFixed(6) : '$'+t.price.toFixed(4);
+      const pimg = t.image ? `<img src="${t.image}" style="width:24px;height:24px;border-radius:50%;flex-shrink:0" onerror="this.style.display='none'">` : '';
+      return `<div class="rec-item" style="display:flex;align-items:center;gap:6px">
+        <span class="rec-rank" style="color:#f0b429">🌱</span>
+        ${pimg}
+        <span class="rec-name"><a href="${t.url}" target="_blank">${t.symbol}</a></span>
+        <span class="rec-score" style="background:#f0b42922">買盤${t.buy_ratio}%</span>
+        <span class="rec-reasons">$${p} | 1h:${t.change_1h}% | 24h:${t.change_24h}% | 流動:$${(t.liquidity/1000).toFixed(1)}K | 量:$${(t.volume_24h/1000).toFixed(0)}K</span>
+      </div>`;
+    }).join('') || '<div style="color:#8b949e;font-size:12px">目前沒有符合條件的潛力股</div>';
+
+    // 新幣提醒：檢查推薦和潛力股是否有新幣
+    const currentSymbols = new Set();
+    d.tokens.filter(t=>t.score>=4).forEach(t=>currentSymbols.add(t.symbol));
+    (d.potential||[]).forEach(t=>currentSymbols.add(t.symbol));
+    let isFirst = seenSymbols.size === 0;
+    let newOnes = [];
+    currentSymbols.forEach(s => { if (!seenSymbols.has(s)) newOnes.push(s); });
+    if (!isFirst && newOnes.length > 0) {
+      const asnd = document.getElementById('alertSound');
+      asnd.currentTime = 0;
+      asnd.play().catch(()=>{});
+    }
+    currentSymbols.forEach(s => seenSymbols.add(s));
+
+    // 社群熱門
+    document.getElementById('trending').innerHTML = (d.trending||[]).map(t=>{
+      return `<div style="background:#161b22;border-radius:6px;padding:6px 12px;display:flex;align-items:center;gap:6px;font-size:12px">
+        <b style="color:#a371f7">#${t.rank}</b>
+        <img src="${t.thumb}" style="width:18px;height:18px;border-radius:50%" onerror="this.style.display='none'">
+        <span>${t.name}</span>
+        <span style="color:#8b949e">${t.symbol}</span>
+      </div>`;
+    }).join('') || '<span style="color:#8b949e;font-size:12px">載入中...</span>';
+
+    // 表格
+    document.getElementById('tbody').innerHTML = d.tokens.map((t,i)=>{
+      const c24 = t.change_24h>=0?'up':'down';
+      const p = t.price<0.0001 ? '$'+t.price.toFixed(8) : t.price<0.01 ? '$'+t.price.toFixed(6) : '$'+t.price.toFixed(4);
+      const scColor = t.score>=4?'#3fb950':t.score>=2?'#58a6ff':t.score>=0?'#8b949e':'#f85149';
+      const timg = t.image ? `<img src="${t.image}" style="width:20px;height:20px;border-radius:50%;vertical-align:middle" onerror="this.style.display='none'">` : '';
+      return `<tr>
+        <td><b style="color:${scColor}">${t.score}</b></td>
+        <td>${timg} <a href="${t.url}" target="_blank">${t.symbol}</a></td>
+        <td style="color:#8b949e">${t.name}</td>
+        <td>${p}</td>
+        <td class="${t.change_1h>=0?'up':'down'}">${t.change_1h>=0?'+':''}${t.change_1h}%</td>
+        <td class="${c24}">${t.change_24h>=0?'+':''}${t.change_24h}%</td>
+        <td>$${(t.volume_24h/1000).toFixed(0)}K</td>
+        <td style="font-size:11px">${t.rating} ${t.reasons.slice(0,3).join(', ')}</td>
+      </tr>`;
+    }).join('');
+  } catch(e){ console.error(e); }
+}
+load(); setInterval(load, 5000);
+</script>
+</body>
+</html>

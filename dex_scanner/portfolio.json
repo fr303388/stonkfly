@@ -1,0 +1,345 @@
+{
+  "positions": [
+    {
+      "symbol": "RIP/SOL",
+      "buy_price": 6.603e-05,
+      "buy_time": "2026-09-25 10:25",
+      "invested": 100,
+      "shares": 1514463.1228229592,
+      "url": "https://dexscreener.com/solana/ht6lkwg7qvnlkq6wpt8gca2nfyfu8agafe81wuaxeu1k",
+      "buy_score": 4,
+      "address": "6WgVQG1yjXA7cjJQYt8VpJGX7aVjbyXz6Aaq1UPapump",
+      "chain": "solana",
+      "image": "https://cdn.dexscreener.com/cms/images/KcGaAjx9ksl3O_P0?width=800&height=800&quality=95&format=auto",
+      "current_price": 5.672e-05,
+      "current_value": 85.90034832651824,
+      "pnl": -14.099651673481759,
+      "pnl_pct": -14.1
+    },
+    {
+      "symbol": "CHIPS/SOL",
+      "buy_price": 0.0001368,
+      "buy_time": "2026-09-25 10:36",
+      "invested": 100,
+      "shares": 730994.1520467837,
+      "url": "https://dexscreener.com/solana/g5kbo4ihfad1y9j3ae8dglk85frxksct66jbo8mmqv2j",
+      "buy_score": 4.5,
+      "address": "3qm8LhrCbpaHbcQexV37JgDGTrrjNfxDPEdf9yuLXLYs",
+      "chain": "solana",
+      "image": "https://cdn.dexscreener.com/cms/images/rJT3snAio3xhIC77?width=800&height=800&quality=95&format=auto",
+      "current_price": 0.0001083,
+      "current_value": 79.16666666666667,
+      "pnl": -20.83333333333333,
+      "pnl_pct": -20.8
+    },
+    {
+      "symbol": "Shurikane/SOL",
+      "buy_price": 0.0001671,
+      "buy_time": "2026-09-25 11:13",
+      "invested": 100,
+      "shares": 598444.0454817475,
+      "url": "https://dexscreener.com/solana/cdzmg8hza43irmpes1mxnkdcbyt13hdchzmbztxarp9j",
+      "buy_score": 4.5,
+      "address": "EXXR9Wt3mjxbjmzhPVj7EcA3zfxZd9uk1WhMioeipump",
+      "chain": "solana",
+      "image": "https://cdn.dexscreener.com/cms/images/-_E74aJ_9mrrU8c3?width=800&height=800&quality=95&format=auto",
+      "current_price": 9.893e-05,
+      "current_value": 59.20406941950928,
+      "pnl": -40.79593058049072,
+      "pnl_pct": -40.8
+    },
+    {
+      "symbol": "TRUMPCAT/SOL",
+      "buy_price": 9.615e-05,
+      "buy_time": "2026-09-25 11:21",
+      "invested": 100,
+      "shares": 1040041.6016640665,
+      "url": "https://dexscreener.com/solana/hfxemazglfr6voh6msjgy3zndqxeyenmkm17uwnrgdfi",
+      "buy_score": 4.5,
+      "address": "2xENFwp9jh3VY7yCQgKgeQ3KsgVCzm7AZVWWruUcFLEX",
+      "chain": "solana",
+      "image": "https://cdn.dexscreener.com/cms/images/vDjumuP8nibTdES1?width=800&height=800&quality=95&format=auto",
+      "current_price": 8.01e-05,
+      "current_value": 83.30733229329172,
+      "pnl": -16.692667706708278,
+      "pnl_pct": -16.7
+    },
+    {
+      "symbol": "FARTCOINU/SOL",
+      "buy_price": 6.663e-05,
+      "buy_time": "2026-09-25 11:23",
+      "invested": 100,
+      "shares": 1500825.4539996998,
+      "url": "https://dexscreener.com/solana/9aut3jftkilmywm5kkyzrhzqbybkbtvvws5hiyrsedfg",
+      "buy_score": 4,
+      "address": "4bC8X3gaQ4EZjnr5CPtZkCc2i4MGptf9XZvAMT8hHstm",
+      "chain": "solana",
+      "image": "https://cdn.dexscreener.com/cms/images/Qo4btnAC7az6quDU?width=800&height=800&quality=95&format=auto"
+    }
+  ],
+  "started": "2026-09-25 10:16",
+  "total_invested": 1700,
+  "trades": [
+    {
+      "time": "2026-09-25 10:18",
+      "symbol": "COMPANY/SOL",
+      "action": "SELL",
+      "buy_price": 7.385e-05,
+      "sell_price": 1.231e-05,
+      "pnl": -83.33,
+      "pnl_pct": -83.3,
+      "reason": "停損-83.3%"
+    },
+    {
+      "time": "2026-09-25 10:22",
+      "symbol": "afk/SOL",
+      "action": "BUY",
+      "buy_price": 6.778e-05,
+      "sell_price": 0,
+      "pnl": 0,
+      "pnl_pct": 0,
+      "reason": "推薦score=4"
+    },
+    {
+      "time": "2026-09-25 10:24",
+      "symbol": "afk/SOL",
+      "action": "SELL",
+      "buy_price": 6.778e-05,
+      "sell_price": 0.0001074,
+      "pnl": 58.45,
+      "pnl_pct": 58.5,
+      "reason": "停利+58.5%"
+    },
+    {
+      "time": "2026-09-25 10:24",
+      "symbol": "afk/SOL",
+      "action": "BUY",
+      "buy_price": 0.0001074,
+      "sell_price": 0,
+      "pnl": 0,
+      "pnl_pct": 0,
+      "reason": "推薦score=4.5"
+    },
+    {
+      "time": "2026-09-25 10:25",
+      "symbol": "CHIPS/SOL",
+      "action": "SELL",
+      "buy_price": 0.0001736,
+      "sell_price": 7.332e-05,
+      "pnl": -57.76,
+      "pnl_pct": -57.8,
+      "reason": "停損-57.8%"
+    },
+    {
+      "time": "2026-09-25 10:25",
+      "symbol": "CHIPS/SOL",
+      "action": "BUY",
+      "buy_price": 7.332e-05,
+      "sell_price": 0,
+      "pnl": 0,
+      "pnl_pct": 0,
+      "reason": "推薦score=5.5"
+    },
+    {
+      "time": "2026-09-25 10:25",
+      "symbol": "RIP/SOL",
+      "action": "BUY",
+      "buy_price": 6.603e-05,
+      "sell_price": 0,
+      "pnl": 0,
+      "pnl_pct": 0,
+      "reason": "推薦score=4"
+    },
+    {
+      "time": "2026-09-25 10:28",
+      "symbol": "afk/SOL",
+      "action": "SELL",
+      "buy_price": 0.0001074,
+      "sell_price": 0.0001654,
+      "pnl": 54.0,
+      "pnl_pct": 54.0,
+      "reason": "停利+54.0%"
+    },
+    {
+      "time": "2026-09-25 10:29",
+      "symbol": "CHIPS/SOL",
+      "action": "SELL",
+      "buy_price": 7.332e-05,
+      "sell_price": 0.0001107,
+      "pnl": 50.98,
+      "pnl_pct": 51.0,
+      "reason": "停利+51.0%"
+    },
+    {
+      "time": "2026-09-25 10:29",
+      "symbol": "CHIPS/SOL",
+      "action": "BUY",
+      "buy_price": 0.0001107,
+      "sell_price": 0,
+      "pnl": 0,
+      "pnl_pct": 0,
+      "reason": "推薦score=5.5"
+    },
+    {
+      "time": "2026-09-25 10:33",
+      "symbol": "afk/SOL",
+      "action": "BUY",
+      "buy_price": 0.0001115,
+      "sell_price": 0,
+      "pnl": 0,
+      "pnl_pct": 0,
+      "reason": "推薦score=5.5"
+    },
+    {
+      "time": "2026-09-25 10:35",
+      "symbol": "CHIPS/SOL",
+      "action": "SELL",
+      "buy_price": 0.0001107,
+      "sell_price": 0.0001737,
+      "pnl": 56.91,
+      "pnl_pct": 56.9,
+      "reason": "停利+56.9%"
+    },
+    {
+      "time": "2026-09-25 10:36",
+      "symbol": "CHIPS/SOL",
+      "action": "BUY",
+      "buy_price": 0.0001368,
+      "sell_price": 0,
+      "pnl": 0,
+      "pnl_pct": 0,
+      "reason": "推薦score=4.5"
+    },
+    {
+      "time": "2026-09-25 10:37",
+      "symbol": "afk/SOL",
+      "action": "SELL",
+      "buy_price": 0.0001115,
+      "sell_price": 5.566e-05,
+      "pnl": -50.08,
+      "pnl_pct": -50.1,
+      "reason": "停損-50.1%"
+    },
+    {
+      "time": "2026-09-25 10:37",
+      "symbol": "afk/SOL",
+      "action": "BUY",
+      "buy_price": 5.566e-05,
+      "sell_price": 0,
+      "pnl": 0,
+      "pnl_pct": 0,
+      "reason": "推薦score=4.5"
+    },
+    {
+      "time": "2026-09-25 10:39",
+      "symbol": "WEED/SOL",
+      "action": "BUY",
+      "buy_price": 6.68e-05,
+      "sell_price": 0,
+      "pnl": 0,
+      "pnl_pct": 0,
+      "reason": "推薦score=4.5"
+    },
+    {
+      "time": "2026-09-25 10:40",
+      "symbol": "afk/SOL",
+      "action": "SELL",
+      "buy_price": 5.566e-05,
+      "sell_price": 2.762e-05,
+      "pnl": -50.38,
+      "pnl_pct": -50.4,
+      "reason": "停損-50.4%"
+    },
+    {
+      "time": "2026-09-25 10:46",
+      "symbol": "WEED/SOL",
+      "action": "SELL",
+      "buy_price": 6.68e-05,
+      "sell_price": 3.246e-05,
+      "pnl": -51.41,
+      "pnl_pct": -51.4,
+      "reason": "停損-51.4%"
+    },
+    {
+      "time": "2026-09-25 10:58",
+      "symbol": "TTP/SOL",
+      "action": "SELL",
+      "buy_price": 0.0002911,
+      "sell_price": 0.0004455,
+      "pnl": 53.04,
+      "pnl_pct": 53.0,
+      "reason": "停利+53.0%"
+    },
+    {
+      "time": "2026-09-25 10:58",
+      "symbol": "Shurikane/SOL",
+      "action": "BUY",
+      "buy_price": 0.0001092,
+      "sell_price": 0,
+      "pnl": 0,
+      "pnl_pct": 0,
+      "reason": "推薦score=6.0"
+    },
+    {
+      "time": "2026-09-25 11:13",
+      "symbol": "Shurikane/SOL",
+      "action": "SELL",
+      "buy_price": 0.0001092,
+      "sell_price": 0.0001671,
+      "pnl": 53.02,
+      "pnl_pct": 53.0,
+      "reason": "停利+53.0%"
+    },
+    {
+      "time": "2026-09-25 11:13",
+      "symbol": "Shurikane/SOL",
+      "action": "BUY",
+      "buy_price": 0.0001671,
+      "sell_price": 0,
+      "pnl": 0,
+      "pnl_pct": 0,
+      "reason": "推薦score=4.5"
+    },
+    {
+      "time": "2026-09-25 11:20",
+      "symbol": "TRUMPCAT/SOL",
+      "action": "BUY",
+      "buy_price": 5.472e-05,
+      "sell_price": 0,
+      "pnl": 0,
+      "pnl_pct": 0,
+      "reason": "推薦score=4.5"
+    },
+    {
+      "time": "2026-09-25 11:21",
+      "symbol": "TRUMPCAT/SOL",
+      "action": "SELL",
+      "buy_price": 5.472e-05,
+      "sell_price": 9.615e-05,
+      "pnl": 75.71,
+      "pnl_pct": 75.7,
+      "reason": "停利+75.7%"
+    },
+    {
+      "time": "2026-09-25 11:21",
+      "symbol": "TRUMPCAT/SOL",
+      "action": "BUY",
+      "buy_price": 9.615e-05,
+      "sell_price": 0,
+      "pnl": 0,
+      "pnl_pct": 0,
+      "reason": "推薦score=4.5"
+    },
+    {
+      "time": "2026-09-25 11:23",
+      "symbol": "FARTCOINU/SOL",
+      "action": "BUY",
+      "buy_price": 6.663e-05,
+      "sell_price": 0,
+      "pnl": 0,
+      "pnl_pct": 0,
+      "reason": "推薦score=4"
+    }
+  ],
+  "capital": 1000
+}
