@@ -103,8 +103,18 @@ Stonkfly 是一個以**真實果蠅全腦連接組（MaleCNS v1.0）**為基礎�
 - 通知開關切換時發送確認訊息
 - 價格格式化：≥$1,000→0位小數、≥$100→2位、≥$1→4位、<$1→8位
 
+### 📰 市場情緒與新聞
+- **獨立新聞服務**：每 60 秒抓取財經新聞（Cointelegraph、Investing.com），與交易進程脫鉤
+- **新聞推播**：看漲/看跌新聞標題 + 連結即時推送 Telegram
+- **新聞音效**：有新聞更新時播放提示音（設定可開關）
+- **市場情緒儀表板**：FNG 恐貪指數、新聞漲跌分類、標籤特色標記
+- **新聞中文翻譯**：英文標題自動翻譯繁體中文
+- **重要性標籤**：每則新聞自動標記 TAG 特色
+
 ### 🛡️ 穩定性機制
 - **看門狗（Watchdog）**：每小時自動偵錯，當機自動重啟
+- **分型機器人看門狗**：每 2 分鐘檢查分型機器人是否卡住，超過 10 分鐘自動重啟
+- **獨立新聞服務**：新聞抓取與交易進程完全分離，切換交易對不影響新聞載入
 - **停滯偵測**：超過 6 分鐘未更新自動重啟
 - **大腦睡眠機制**：每 25 步在進程內完成睡眠整理
 - **記憶體管理**：每步強制垃圾回收
@@ -134,7 +144,7 @@ python -m venv .venv
 pip install -e .
 ```
 
-### 啟動（三個進程）
+### 啟動（五個進程）
 
 ```bash
 # 1. 啟動監控伺服器
@@ -145,9 +155,17 @@ python -m stonkfly.cli run --out runs/paper --products BTC-USDT --exchange binan
 
 # 3. 啟動分型多幣種機器人
 python -m stonkfly.fractal_multi_bot
+
+# 4. 啟動獨立新聞服務（每60秒更新新聞）
+python news_service.py
+
+# 5. 啟動分型機器人看門狗（每2分鐘檢查，卡住自動重啟）
+python fractal_watchdog.py
 ```
 
 監控位址：**http://127.0.0.1:8767**
+
+> 💡 DEX 迷因幣雷達為獨立應用（port 8770），見 `dex_scanner/` 目錄。
 
 ### Telegram 設定（選擇性）
 
@@ -199,9 +217,12 @@ stonkfly/
 │   ├── telegram_notify.py  # Telegram 通知模組
 │   ├── fractal_multi_bot.py # 分型多幣種機器人
 │   ├── chan_no_brain_trader.py # 無腦分型交易
+│   ├── market_sentiment.py # 市場情緒/新聞抓取
 │   └── ...                 # 腦模型、纏論分析等
 ├── monitor_pro.py          # Flask 監控伺服器
 ├── monitor_pro.html        # 監控介面
+├── news_service.py         # 獨立新聞服務（每60秒更新）
+├── fractal_watchdog.py      # 分型機器人看門狗
 ├── runs/paper/             # 模擬資料（帳本、檢查點、學習資料）
 ├── .env                    # 環境設定（Telegram、API Key）
 └── README.md
